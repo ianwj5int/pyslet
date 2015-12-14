@@ -640,7 +640,7 @@ class BinaryExpression(CommonExpression):
             elif typeCode is None:  # null div null
                 return edm.EDMValue.NewSimpleValue(edm.SimpleType.Int32)
             else:
-                raise EvaluationError("Illegal operands for div")
+                raise EvaluationError("Illegal operands for mod")
         except (ZeroDivisionError, ValueError) as e:
             raise EvaluationError(str(e))
 
@@ -774,7 +774,7 @@ class BinaryExpression(CommonExpression):
                 result.set_from_value(True)
                 return result
             else:
-                raise EvaluationError("Illegal operands for add")
+                raise EvaluationError("Illegal operands for eq")
 
     def EvaluateNe(self, lValue, rValue):
         result = self.EvaluateEq(lValue, rValue)
