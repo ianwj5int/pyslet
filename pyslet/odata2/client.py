@@ -967,7 +967,7 @@ class Client(app.Client):
         doc = core.Document(baseURI=self.serviceRoot)
         if isinstance(self.serviceRoot, uri.FileURL):
             # load the service root from a file instead
-            doc.Read()            
+            doc.Read()
         else:
             request = http.ClientRequest(str(self.serviceRoot))
             request.set_header('Accept', 'application/atomsvc+xml')
@@ -983,7 +983,7 @@ class Client(app.Client):
             self.model = None
             for w in self.service.Workspace:
                 for f in w.Collection:
-                    url = f.GetFeedURL()
+                    url = f.get_feed_url()
                     if f.Title:
                         self.feeds[f.Title.GetValue()] = url
         else:
