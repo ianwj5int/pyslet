@@ -12,7 +12,7 @@ from oauthlib import oauth2
 from optparse import OptionParser
 
 import pyslet.imsbltiv1p0 as lti
-import pyslet.xml20081126.structures as xml
+import pyslet.xml.structures as xml
 import pyslet.odata2.csdl as edm
 import pyslet.odata2.core as odata
 import pyslet.http.client as http
@@ -34,7 +34,7 @@ class MultiTenantSession(lti.ToolProviderSession):
 
         If there is no owner, None is returned."""
         if self.entity.exists:
-            return self.entity['Owner'].GetEntity()
+            return self.entity['Owner'].get_entity()
         else:
             return None
 
@@ -45,7 +45,7 @@ class MultiTenantSession(lti.ToolProviderSession):
         logs outs.  Future calls to :meth:`get_owner` will return
         None."""
         if self.entity.exists:
-            with self.entity['Owner'].OpenCollection() as collection:
+            with self.entity['Owner'].open() as collection:
                 collection.clear()
         else:
             self.entity['Owner'].ClearBindings()
@@ -121,7 +121,7 @@ class MultiTenantTPApp(lti.ToolProviderApp):
             page_context['got_user'] = False
             if self.google_id:
                 page_context['google_sso'] = True
-                page_context['gclient_id_attr'] = xml.EscapeCharData7(
+                page_context['gclient_id_attr'] = xml.escape_char_data7(
                     self.google_id, True)
                 page_context[self.csrf_token] = context.session.sid()
             else:
@@ -185,14 +185,14 @@ class MultiTenantTPApp(lti.ToolProviderApp):
                 return self.json_response(
                     context, json.dumps("Already logged in"))
             # clear this link
-            with context.session.entity['Owner'].OpenCollection() as \
+            with context.session.entity['Owner'].open() as \
                     collection:
                 collection.clear()
         logging.debug("Google user logged in: %s <%s>", userinfo['name'],
                       userinfo['email'])
-        with self.container['Owners'].OpenCollection() as collection:
+        with self.container['Owners'].open() as collection:
             # let's find this user in our database
-            id = edm.EDMValue.NewSimpleValue(edm.SimpleType.String)
+            id = edm.EDMValue.from_type(edm.SimpleType.String)
             id.set_from_value(userinfo['id'])
             filter = odata.CommonExpression.from_str(
                 "IDType eq 'google' and ID eq :id", {'id': id})
@@ -209,17 +209,17 @@ class MultiTenantTPApp(lti.ToolProviderApp):
                 owner['FamilyName'].set_from_value(userinfo['family_name'])
                 owner['FullName'].set_from_value(userinfo['name'])
                 owner['Email'].set_from_value(userinfo['email'])
-                owner['Session'].BindEntity(context.session.entity)
+                owner['Session'].bind_entity(context.session.entity)
                 # and create them a silo for their data
-                with owner['Silo'].Target().OpenCollection() as silos:
+                with owner['Silo'].target().open() as silos:
                     silo = silos.new_entity()
                     silo['ID'].set_from_value(owner['Key'].value)
                     silo['Slug'].set_from_value(userinfo['email'])
                     silos.insert_entity(silo)
-                owner['Silo'].BindEntity(silo)
+                owner['Silo'].bind_entity(silo)
                 collection.insert_entity(owner)
                 # and finally create a default consumer for them
-                with silo['Consumers'].OpenCollection() as collection:
+                with silo['Consumers'].open() as collection:
                     consumer = lti.ToolConsumer.new_from_values(
                         collection.new_entity(), self.app_cipher, "default")
                     collection.insert_entity(consumer.entity)
@@ -231,7 +231,7 @@ class MultiTenantTPApp(lti.ToolProviderApp):
                 owner['FamilyName'].set_from_value(userinfo['family_name'])
                 owner['FullName'].set_from_value(userinfo['name'])
                 owner['Email'].set_from_value(userinfo['email'])
-                owner['Session'].BindEntity(context.session.entity)
+                owner['Session'].bind_entity(context.session.entity)
                 collection.update_entity(owner)
             else:
                 logging.error("Duplicate google owner: %s <%s>",
@@ -248,7 +248,7 @@ class MultiTenantTPApp(lti.ToolProviderApp):
         page_context['got_user'] = False
         if self.google_id:
             page_context['google_sso'] = True
-            page_context['gclient_id_attr'] = xml.EscapeCharData7(
+            page_context['gclient_id_attr'] = xml.escape_char_data7(
                 self.google_id, True)
         else:
             page_context['google_sso'] = False
@@ -271,10 +271,10 @@ class MultiTenantTPApp(lti.ToolProviderApp):
             # we require an owner to be logged in
             raise wsgi.PageNotAuthorized
         page_context['user_name'] = owner['FullName'].value
-        silo = owner['Silo'].GetEntity()
+        silo = owner['Silo'].get_entity()
         page_context['silo'] = silo
         consumer_list = []
-        with silo['Consumers'].OpenCollection() as collection:
+        with silo['Consumers'].open() as collection:
             collection.set_orderby(
                 odata.Parser('Handle asc').parse_orderby_option())
             for consumer in collection.itervalues():
@@ -282,16 +282,16 @@ class MultiTenantTPApp(lti.ToolProviderApp):
                 consumer = lti.ToolConsumer(consumer, self.app_cipher)
                 query = urllib.urlencode(
                     {'cid':
-                     odata.ODataURI.FormatLiteral(consumer.entity['ID'])})
+                     odata.ODataURI.format_literal(consumer.entity['ID'])})
                 citem['consumer'] = consumer
-                citem['cedit_link'] = xml.EscapeCharData7(
+                citem['cedit_link'] = xml.escape_char_data7(
                     'edit?' + query, True)
-                citem['cdel_link'] = xml.EscapeCharData7(
+                citem['cdel_link'] = xml.escape_char_data7(
                     'del?' + query, True)
                 consumer_list.append(citem)
             query = urllib.urlencode(
-                {'silo': odata.ODataURI.FormatLiteral(silo['ID'])})
-            page_context['cadd_link'] = xml.EscapeCharData7(
+                {'silo': odata.ODataURI.format_literal(silo['ID'])})
+            page_context['cadd_link'] = xml.escape_char_data7(
                 'add?' + query, True)
         page_context['consumers'] = consumer_list
         page_context[self.csrf_token] = context.session.sid()
@@ -308,12 +308,12 @@ class MultiTenantTPApp(lti.ToolProviderApp):
         if owner is None:
             # we require an owner to be logged in
             raise wsgi.PageNotAuthorized
-        silo = owner['Silo'].GetEntity()
+        silo = owner['Silo'].get_entity()
         try:
             handle = context.get_form_string('handle', 80)
             key = context.get_form_string('key', 80)
             secret = context.get_form_string('secret', 80)
-            with silo['Consumers'].OpenCollection() as collection:
+            with silo['Consumers'].open() as collection:
                 consumer = lti.ToolConsumer.new_from_values(
                     collection.new_entity(), self.app_cipher, handle, key=key,
                     secret=secret)
@@ -338,17 +338,17 @@ class MultiTenantTPApp(lti.ToolProviderApp):
             # we require an owner to be logged in
             raise wsgi.PageNotAuthorized
         page_context['owner'] = owner
-        silo = owner['Silo'].GetEntity()
+        silo = owner['Silo'].get_entity()
         page_context['silo'] = silo
         query = context.get_query()
-        cid = odata.ParseURILiteral(query.get('cid', '')).value
-        with silo['Consumers'].OpenCollection() as collection:
+        cid = odata.uri_literal_from_str(query.get('cid', '')).value
+        with silo['Consumers'].open() as collection:
             try:
                 consumer = lti.ToolConsumer(collection[cid], self.app_cipher)
             except KeyError:
                 raise wsgi.PageNotAuthorized
         page_context['consumer'] = consumer
-        page_context['cid_attr'] = xml.EscapeCharData7(str(cid), True)
+        page_context['cid_attr'] = xml.escape_char_data7(str(cid), True)
         page_context[self.csrf_token] = context.session.sid()
         data = self.render_template(context, 'consumers/edit_form.html',
                                     page_context)
@@ -363,12 +363,12 @@ class MultiTenantTPApp(lti.ToolProviderApp):
         if owner is None:
             # we require an owner to be logged in
             raise wsgi.PageNotAuthorized
-        silo = owner['Silo'].GetEntity()
+        silo = owner['Silo'].get_entity()
         try:
             cid = context.get_form_long('cid')
             key = context.get_form_string('key', 80)
             secret = context.get_form_string('secret', 80)
-            with silo['Consumers'].OpenCollection() as collection:
+            with silo['Consumers'].open() as collection:
                 consumer = lti.ToolConsumer(collection[cid], self.app_cipher)
                 # we never change the handle
                 consumer.update_from_values(key, secret)
@@ -387,11 +387,11 @@ class MultiTenantTPApp(lti.ToolProviderApp):
             # we require an owner to be logged in
             raise wsgi.PageNotAuthorized
         page_context['owner'] = owner
-        silo = owner['Silo'].GetEntity()
+        silo = owner['Silo'].get_entity()
         page_context['silo'] = silo
         query = context.get_query()
-        cid = odata.ParseURILiteral(query.get('cid', '')).value
-        with silo['Consumers'].OpenCollection() as collection:
+        cid = odata.uri_literal_from_str(query.get('cid', '')).value
+        with silo['Consumers'].open() as collection:
             try:
                 consumer = collection[cid]
             except KeyError:
@@ -411,13 +411,13 @@ class MultiTenantTPApp(lti.ToolProviderApp):
         if owner is None:
             # we require an owner to be logged in
             raise wsgi.PageNotAuthorized
-        silo = owner['Silo'].GetEntity()
+        silo = owner['Silo'].get_entity()
         try:
             cid = context.get_form_long('cid')
-            with silo['Consumers'].OpenCollection() as collection:
+            with silo['Consumers'].open() as collection:
                 consumer = collection[cid]
                 # now to delete we must delete from the parent collection
-                consumer.Delete()
+                consumer.delete()
         except ValueError:
             raise wsgi.BadRequest
         except KeyError:

@@ -5,11 +5,10 @@ http://msdn.microsoft.com/en-us/library/dd541284(v=prot.10)"""
 
 import itertools
 
-import pyslet.xml20081126.structures as xml
-import pyslet.xmlnames20091208 as xmlns
-import pyslet.rfc2396 as uri
-import pyslet.odata2.csdl as edm
-from pyslet.pep8 import PEP8Compatibility
+from . import csdl as edm
+from .. import rfc2396 as uri
+from ..xml import structures as xml
+from ..xml import namespace as xmlns
 
 
 #: Namespace to use for EDMX elements
@@ -17,7 +16,7 @@ EDMX_NAMESPACE = "http://schemas.microsoft.com/ado/2007/06/edmx"
 
 
 class EDMXElement(xmlns.XMLNSElement):
-    XMLCONTENT = xmlns.ElementType.ElementContent
+    XMLCONTENT = xml.ElementType.ElementContent
 
 
 class DataServices(edm.NameTableMixin, EDMXElement):
@@ -28,19 +27,19 @@ class DataServices(edm.NameTableMixin, EDMXElement):
         edm.NameTableMixin.__init__(self)
         self.Schema = []
 
-    def GetChildren(self):
+    def get_children(self):
         for s in self.Schema:
             yield s
-        for child in super(DataServices, self).GetChildren():
+        for child in super(DataServices, self).get_children():
             yield child
 
     def content_changed(self):
         for s in self.Schema:
-            self.Declare(s)
+            self.declare(s)
         for s in self.Schema:
-            s.UpdateTypeRefs(self)
+            s.update_type_refs(self)
         for s in self.Schema:
-            s.UpdateSetRefs(self)
+            s.update_set_refs(self)
 
     def validate(self):
         for s in self.Schema:
@@ -82,13 +81,13 @@ class Edmx(EDMXElement):
         self.AnnotationsReference = []
         self.DataServices = self.DataServicesClass(self)
 
-    def GetChildren(self):
+    def get_children(self):
         for child in itertools.chain(
                 self.Reference,
                 self.AnnotationsReference):
             yield child
         yield self.DataServices
-        for child in EDMXElement.GetChildren(self):
+        for child in EDMXElement.get_children(self):
             yield child
 
     def validate(self):
@@ -104,14 +103,14 @@ class Document(xmlns.XMLNSDocument):
     def __init__(self, **args):
         xmlns.XMLNSDocument.__init__(self, **args)
         self.defaultNS = EDMX_NAMESPACE
-        self.MakePrefix(EDMX_NAMESPACE, 'edmx')
+        self.make_prefix(EDMX_NAMESPACE, 'edmx')
 
     @classmethod
     def get_element_class(cls, name):
-        """Overrides :py:meth:`pyslet.xmlnames20091208.XMLNSDocument.get_element_class` to look up name."""
-        eClass = Document.classMap.get(
+        """Overridden to look up name in the class map"""
+        eclass = Document.classMap.get(
             name, Document.classMap.get((name[0], None), xmlns.XMLNSElement))
-        return eClass
+        return eclass
 
     def validate(self):
         # These extensions MUST be used by a data service in conjunction
@@ -121,5 +120,5 @@ class Document(xmlns.XMLNSDocument):
         self.root.validate()
 
 
-xmlns.MapClassElements(Document.classMap, globals())
-xmlns.MapClassElements(Document.classMap, edm, edm.NAMESPACE_ALIASES)
+xmlns.map_class_elements(Document.classMap, globals())
+xmlns.map_class_elements(Document.classMap, edm, edm.NAMESPACE_ALIASES)

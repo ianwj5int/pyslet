@@ -120,9 +120,32 @@ six.u respectvely.
 Compatibility comes with a cost, if you only need to support Python 3.3
 and higher (while retaining compatibility with Python 2) then you should
 use the first form and ignore these literal functions in performance
-critical code.
-        
-        
+critical code.  If you want more compatibility then define all string
+literals ahead of time, e.g., at module level.
+
+Character Constants
+~~~~~~~~~~~~~~~~~~~
+
+These constants are provided to define common character strings (forcing
+the unicode type in Python 2).
+
+..  data:: uempty
+
+The empty string.
+
+..  data:: uspace
+
+Single space character, character(0x20).
+
+
+Text Functions
+~~~~~~~~~~~~~~
+
+..  function::  is_string(org)
+
+    Returns True if *arg* is either a character or binary string.
+
+    
 ..  function::  is_text(arg)
 
     Returns True if *arg* is text and False otherwise.  In Python 3 this
@@ -138,7 +161,7 @@ critical code.
     simply checks that arg is of type str, in Python 2 this allows
     either string type but always returns a unicode string.  No codec
     is used so this has the side effect of ensuring that only ASCII
-    strings will be acceptable in Python 2.
+    compatible str instances will be acceptable in Python 2.
 
 
 ..  function::  to_text(arg)
@@ -147,7 +170,7 @@ critical code.
     always returns a unicode string.  In Python 3, this function is
     almost identical to the built-in *str* except that it takes binary
     data that can be interpreted as ascii and converts it to text.  In
-    otherwords::
+    other words::
     
         to_text(b"hello") == "hello"
     
@@ -155,6 +178,32 @@ critical code.
     in Python 2::
     
         str(b"hello") == "hello"  
+
+    arg need not be a string, this function will cause an arbitrary
+    object's __str__ (or __unicode__ in Python 2) method to be
+    evaluated.  
+
+
+..  function::  force_ascii(arg)
+
+    Returns *arg* as ascii text, converting it if necessary.  The result
+    is an object of type str, in both python 2 and python 3.  The
+    difference is that in Python 2 unicode strings are accepted and
+    forced to type str by *encoding* with the 'ascii' codec whereas in
+    Python 3 bytes instances are accepted and forced to type str by
+    *decoding* with the 'ascii' codec. 
+
+    This function is not needed very often but in some cases Python
+    interfaces required type str in Python 2 when the intention was to
+    accept ASCII text rather than arbitrary bytes.  When migrated to
+    Python 3 these interfaces can be problematic as inputs may be
+    generated as ASCII bytes rather than strings in Python 3, e.g., the
+    output of base64 encoding.
+
+
+..	autoclass:: UnicodeMixin
+	:members:
+	:show-inheritance:
 
 
 ..  function::  is_unicode(arg)
@@ -168,9 +217,33 @@ critical code.
 
 ..  function::  character(codepoint)
 
-    Given an integer codepoint returns a single unicode character.
+    Given an integer codepoint returns a single unicode character.  You
+    can also pass a single byte value (defined as the type returned by
+    indexing a binary string).  Bear in mind that in Python 2 this is a
+    single-character string, not an integer.  See :func:`byte` for how
+    to create byte values dynamically.
 
 
+..  function::  join_characters(iterable)
+
+    Convenience function for concatenating an iterable of characters (or
+    character strings).  In Python 3 this is just::
+
+        ''.join
+
+    In Python 2 it ensures the result is a unicode string.
+
+
+Bytes
+~~~~~
+
+..  function::  force_bytes(arg)
+
+    Given either a binary string or a character string, returns a binary
+    string of bytes.  If arg is a character string then it is encoded
+    with the 'ascii' codec.
+
+    
 ..  function::  byte(value)
 
     Given either an integer value in the range 0..255, a
@@ -181,16 +254,64 @@ critical code.
     integers.
 
 
+..  function::  byte_value(b)
+
+    Given a value such as would be returned by :func:`byte` or by
+    indexing a binary string, returns the corresponding integer value. 
+    In Python 3 this a no-op but in Python 2 it maps to the builtin
+    function ord.
+
+
 ..  function::  join_bytes(arg)
 
     Given an arg that iterates to yield bytes, returns a bytes object
-    containing those bytes.
+    containing those bytes.  It is important not to confuse this
+    operation with the more common joining of binary strings.  No
+    function is provided for that as the following construct works
+    as expected in both Python 2 and Python 3::
+    
+        b''.join(bstr_list)
+    
+    The usage of join_bytes can best be illustrated by the following two
+    interpreter sessions.
+
+    Python 2.7.10::
+
+        >>> from pyslet.py2 import join_bytes
+        >>> join_bytes(list(b'abc'))
+        'abc'
+        >>> b''.join(list(b'abc'))
+        'abc'
+
+    Python 3.5.1::
+
+        >>> from pyslet.py2 import join_bytes
+        >>> join_bytes(list(b'abc'))
+        b'abc'
+        >>> b''.join(list(b'abc'))
+        Traceback (most recent call last):
+          File "<stdin>", line 1, in <module>
+        TypeError: sequence item 0: expected a bytes-like object, int found
 
 
-..	autoclass:: UnicodeMixin
-	:members:
-	:show-inheritance:
+..  function::  byte_to_bstr(arg)
 
+    Given a single byte, returns a bytes object of length 1 containing
+    that byte.  This is a more efficient way of writing::
+    
+        join_bytes([arg])
+
+    In Python 2 this is a no-operation but in Python 3 it is effectively
+    the same as the above.
+
+
+Numeric Definitions
+-------------------
+
+..  function:: long2
+
+    Missing from Python 3, equivalent to the builtin int.
+    
 
 Iterable Fixes 
 --------------
@@ -215,6 +336,10 @@ Python 3 made a number of changes to the way objects are iterated.
 
 Comparisons
 -----------
+
+..	autoclass:: SortableMixin
+	:members:
+	:show-inheritance:
 
 ..	autoclass:: CmpMixin
 	:members:

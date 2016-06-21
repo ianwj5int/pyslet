@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+import codecs
 import logging
 import unittest
 
@@ -7,8 +8,15 @@ from sys import maxunicode
 
 import pyslet.unicode5 as unicode5
 
-from pyslet.py2 import byte, character, is_text, join_bytes, u8, ul
-from pyslet.py2 import py2, range3
+from pyslet.py2 import (
+    byte,
+    character,
+    is_text,
+    join_bytes,
+    py2,
+    range3,
+    u8,
+    ul)
 
 
 MAX_CHAR = 0x10FFFF
@@ -31,12 +39,23 @@ class EncodingTests(unittest.TestCase):
 
     def test_detection(self):
         test_string = u"Caf\xe9"
-        for codec in ('utf_8', 'utf_32_be', 'utf_32_le', 'utf_16_be',
-                      'utf_16_le'):
+        for codec, bom in (
+                ('utf_8', codecs.BOM_UTF8),
+                ('utf_32_be', codecs.BOM_UTF32_BE),
+                ('utf_32_le', codecs.BOM_UTF32_LE),
+                ('utf_16_be', codecs.BOM_UTF16_BE),
+                ('utf_16_le', codecs.BOM_UTF16_LE)):
             data = test_string.encode(codec)
             detected = unicode5.detect_encoding(data)
             self.assertTrue(detected == codec,
                             "%s detected as %s" % (codec, detected))
+            # and once with the BOM
+            if codec == 'utf_8':
+                codec = 'utf_8_sig'
+            data = bom + data
+            detected = unicode5.detect_encoding(data)
+            self.assertTrue(detected == codec,
+                            "%s with BOM detected as %s" % (codec, detected))
 
 
 class CharClassTests(unittest.TestCase):
@@ -58,6 +77,10 @@ class CharClassTests(unittest.TestCase):
         self.assertTrue(self.class_test(c) == 'abcxyz')
         cc = unicode5.CharClass(c)
         self.assertTrue(self.class_test(cc) == 'abcxyz')
+        c = unicode5.CharClass(('a', 'c'), ('e', 'g'), 'd')
+        self.assertTrue(
+            len(c.ranges) == 1, "Missing range optimization: %s"
+            % repr(c.ranges))
 
     def test_complex_constructors(self):
         init_tests = [

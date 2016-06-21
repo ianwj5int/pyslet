@@ -34,9 +34,15 @@ import warnings
 
 from math import modf, floor
 
-from pyslet.py2 import range3, is_text, UnicodeMixin, CmpMixin
-from pyslet.pep8 import PEP8Compatibility
-from pyslet.unicode5 import BasicParser
+from .pep8 import PEP8Compatibility
+from .py2 import (
+    is_string,
+    is_text,
+    range3,
+    SortableMixin,
+    to_text,
+    UnicodeMixin)
+from .unicode5 import BasicParser
 
 
 class DateTimeError(Exception):
@@ -117,6 +123,7 @@ def get_local_zone():
 
 
 class Truncation(object):
+
     """Defines constants to use when formatting to truncated forms."""
     No = 0          #: constant for no truncation
     Century = 1     #: constant for truncating to century
@@ -131,6 +138,7 @@ NoTruncation = Truncation.No    #: a synonym for Truncation.No
 
 
 class Precision(object):
+
     """Defines constants for representing reduced precision."""
     Century = 1     #: constant for century precision
     Year = 2        #: constant for year precision
@@ -141,7 +149,7 @@ class Precision(object):
     Complete = 7    #: constant for complete representations
 
 
-class Date(PEP8Compatibility, CmpMixin, UnicodeMixin):
+class Date(PEP8Compatibility, SortableMixin, UnicodeMixin):
 
     """A class for representing ISO dates.
 
@@ -1045,82 +1053,19 @@ class Date(PEP8Compatibility, CmpMixin, UnicodeMixin):
         else:
             return Precision.Complete
 
+    def sortkey(self):
+        return (self.century, self.year, self.month, self.week, self.day)
+
+    def otherkey(self, other):
+        if is_string(other):
+            other = self.from_str(other)
+        if isinstance(other, self.__class__):
+            if self.get_precision() == other.get_precision():
+                return other.sortkey()
+        return NotImplemented
+
     def __hash__(self):
-        return hash((self.century, self.year, self.month, self.week, self.day))
-
-    def _check_comparison(self, other):
-        if not isinstance(other, Date):
-            raise TypeError
-        if self.get_precision() != other.get_precision():
-            raise ValueError(
-                "Incompatible precision for comparison: " + str(other))
-
-    def __eq__(self, other):
-        self._check_comparison(other)
-        return self.century == other.century and \
-            self.year == other.year and \
-            self.month == other.month and \
-            self.week == other.week and \
-            self.day == other.day
-
-    def __lt__(self, other):
-        self._check_comparison(other)
-        if self.century == other.century:
-            if self.year == other.year:
-                if self.month is not None:
-                    if self.month == other.month:
-                        return self.day is not None and self.day < other.day
-                    else:
-                        return self.month < other.month
-                elif self.week is not None:
-                    if self.week == other.week:
-                        return self.day is not None and self.day < other.day
-                    else:
-                        return self.week < other.week
-                else:
-                    return False
-            return self.year is not None and self.year < other.year
-        else:
-            return self.century < other.century
-
-    def __le__(self, other):
-        self._check_comparison(other)
-        if self.century == other.century:
-            if self.year == other.year:
-                if self.month is not None:
-                    if self.month == other.month:
-                        return self.day is not None and self.day <= other.day
-                    else:
-                        return self.month < other.month
-                elif self.week is not None:
-                    if self.week == other.week:
-                        return self.day is not None and self.day <= other.day
-                    else:
-                        return self.week < other.week
-                else:
-                    return False
-            else:
-                return self.year is not None and self.year < other.year
-        else:
-            return self.century < other.century
-
-#     def __cmp__(self, other):
-#         if not isinstance(other, Date):
-#             raise TypeError
-#         if self.get_precision() != other.get_precision():
-#             raise ValueError(
-#                 "Incompatible precision for comparison: " + str(other))
-#         result = cmp(self.century, other.century)
-#         if not result:
-#             result = cmp(self.year, other.year)
-#             if not result:
-#                 if self.month is not None:
-#                     result = cmp(self.month, other.month)
-#                     if not result:
-#                         result = cmp(self.day, other.day)
-#                 elif self.week is not None:
-#                     result = cmp(self.week, other.week)
-#         return result
+        return hash(self.sortkey())
 
     def set_from_date(self, src):
         raise DateTimeError(
@@ -1221,7 +1166,8 @@ class Date(PEP8Compatibility, CmpMixin, UnicodeMixin):
             "d = d.offset(days=dd)")
 
 
-class Time(PEP8Compatibility, UnicodeMixin, CmpMixin):
+class Time(PEP8Compatibility, UnicodeMixin, SortableMixin):
+
     """A class for representing ISO times
 
     Values can represent times with reduced precision, for example::
@@ -1597,8 +1543,8 @@ class Time(PEP8Compatibility, UnicodeMixin, CmpMixin):
             raise DateTimeError("Can't shift time to unspecified zone")
         # start by calculating the time shift
         new_offset = zdirection * \
-            ((0 if zhour is None else zhour)
-             * 60 + (0 if zminute is None else zminute))
+            ((0 if zhour is None else zhour) * 60 +
+             (0 if zminute is None else zminute))
         zshift = new_offset - self.get_zone_offset()
         second = self.second
         if self.second is None:
@@ -1996,64 +1942,24 @@ class Time(PEP8Compatibility, UnicodeMixin, CmpMixin):
         if self.second < 0 or self.second >= 61:
             raise DateTimeError("second out of range %s" % str(self.second))
 
+    def sortkey(self):
+        z = self.get_zone_offset()
+        if z is None:
+            return (self.hour, self.minute, self.second)
+        else:
+            return (self.hour, self.minute, self.second, z)
+
+    def otherkey(self, other):
+        if is_string(other):
+            other = self.from_str(other)
+        if isinstance(other, self.__class__):
+            if self.get_precision() == other.get_precision() and \
+                    self.get_zone_offset() == other.get_zone_offset():
+                return other.sortkey()
+        return NotImplemented
+
     def __hash__(self):
-        return hash((self.hour, self.minute, self.second,
-                     self.get_zone_offset()))
-
-    def _check_compare(self, other):
-        if not isinstance(other, Time):
-            raise TypeError
-        if self.get_precision() != other.get_precision():
-            raise ValueError(
-                "Incompatible precision for comparison: " + str(other))
-        zdir = self.get_zone_offset()
-        other_zdir = other.get_zone_offset()
-        if zdir != other_zdir:
-            raise ValueError("Incompatible zone for comparison: " + str(other))
-
-    def __eq__(self, other):
-        self._check_compare(other)
-        return self.hour == other.hour and \
-            self.minute == other.minute and \
-            self.second == other.second
-
-    def __lt__(self, other):
-        self._check_compare(other)
-        if self.hour == other.hour:
-            if self.minute == other.minute:
-                return self.second is not None and self.second < other.second
-            else:
-                return self.minute is not None and self.minute < other.minute
-        else:
-            return self.hour < other.hour
-
-    def __le__(self, other):
-        self._check_compare(other)
-        if self.hour == other.hour:
-            if self.minute == other.minute:
-                return self.second is not None and self.second <= other.second
-            else:
-                return self.minute is not None and self.minute <= other.minute
-        else:
-            return self.hour < other.hour
-
-#     def __cmp__(self, other):
-#         if not isinstance(other, Time):
-#             raise TypeError
-#         if self.get_precision() != other.get_precision():
-#             raise ValueError(
-#                 "Incompatible precision for comparison: " + str(other))
-#         zdir = self.get_zone_offset()
-#         other_zdir = other.get_zone_offset()
-#         if zdir != other_zdir:
-#             raise ValueError("Incompatible zone for comparison: " +
-#                              str(other))
-#         result = cmp(self.hour, other.hour)
-#         if not result:
-#             result = cmp(self.minute, other.minute)
-#             if not result:
-#                 result = cmp(self.second, other.second)
-#         return result
+        return hash(self.sortkey())
 
     def set_origin(self):
         warnings.warn(
@@ -2207,7 +2113,7 @@ class Time(PEP8Compatibility, UnicodeMixin, CmpMixin):
         return overflow
 
 
-class TimePoint(PEP8Compatibility, UnicodeMixin, CmpMixin):
+class TimePoint(PEP8Compatibility, UnicodeMixin, SortableMixin):
 
     """A class for representing ISO timepoints
 
@@ -2526,65 +2432,29 @@ class TimePoint(PEP8Compatibility, UnicodeMixin, CmpMixin):
             raise DateTimeError(
                 "timepoint requires complete precision for date")
 
-    def __hash__(self):
+    def sortkey(self):
         if self.time.get_zone_offset():
-            return hash(self.shift_zone(zdirection=0))
+            # force UTC for comparisons and hashing
+            return self.shift_zone(zdirection=0).sortkey()
         else:
             # no zone, or Zulu time
-            return hash((self.date, self.time))
+            return tuple(list(self.date.sortkey()) + list(self.time.sortkey()))
 
-    def _check_comparison(self, other):
-        if not isinstance(other, TimePoint):
-            other = type(self)(other)
-        # we need to follow the rules for comparing times
-        if self.time.get_precision() != other.time.get_precision():
-            raise ValueError(
-                "Incompatible precision for comparison: " + str(other))
-        z1 = self.time.get_zone_offset()
-        z2 = other.time.get_zone_offset()
-        if z1 != z2:
-            if z1 is None or z2 is None:
-                raise ValueError("Can't compare zone: " + str(other))
-            # we need to change the timezone of other to match ours
-            other = other.shift_zone(*self.time.get_zone3())
-        return other
+    def otherkey(self, other):
+        if is_string(other):
+            other = self.from_str(other)
+        if isinstance(other, self.__class__):
+            if self.get_precision() == other.get_precision():
+                zself = self.time.get_zone_offset()
+                zother = other.time.get_zone_offset()
+                if (zself is None) ^ (zother is None):
+                    # can't compare a time with a zone with one without
+                    return NotImplemented
+                return other.sortkey()
+        return NotImplemented
 
-    def __eq__(self, other):
-        other = self._check_comparison(other)
-        return self.date == other.date and self.time == other.time
-
-    def __lt__(self, other):
-        other = self._check_comparison(other)
-        if self.date == other.date:
-            return self.time < other.time
-        else:
-            return self.date < other.date
-
-    def __le__(self, other):
-        other = self._check_comparison(other)
-        if self.date == other.date:
-            return self.time <= other.time
-        else:
-            return self.date < other.date
-
-#     def __cmp__(self, other):
-#         if not isinstance(other, TimePoint):
-#             other = type(self)(other)
-#         # we need to follow the rules for comparing times
-#         if self.time.get_precision() != other.time.get_precision():
-#             raise ValueError(
-#                 "Incompatible precision for comparison: " + str(other))
-#         z1 = self.time.get_zone_offset()
-#         z2 = other.time.get_zone_offset()
-#         if z1 != z2:
-#             if z1 is None or z2 is None:
-#                 raise ValueError("Can't compare zone: " + str(other))
-#             # we need to change the timezone of other to match ours
-#             other = other.shift_zone(*self.time.get_zone3())
-#         result = cmp(self.date, other.date)
-#         if not result:
-#             result = cmp(self.time, other.time)
-#         return result
+    def __hash__(self):
+        return hash(self.sortkey())
 
     def set_origin(self):
         warnings.warn(
@@ -2720,7 +2590,7 @@ class TimePoint(PEP8Compatibility, UnicodeMixin, CmpMixin):
         return self.set_from_time_point(t)
 
 
-class Duration(PEP8Compatibility):
+class Duration(UnicodeMixin, PEP8Compatibility):
 
     """A class for representing ISO durations"""
 
@@ -2734,6 +2604,9 @@ class Duration(PEP8Compatibility):
             self.set_zero()
         else:
             raise TypeError
+
+    def __unicode__(self):
+        return to_text(self.get_string())
 
     def set_zero(self):
         self.years = 0
@@ -2823,7 +2696,7 @@ class Duration(PEP8Compatibility):
             else:
                 return 'P' + date_part
         else:
-            pass
+            raise NotImplementedError
 
     def set_from_duration(self, src):
         self.years = src.years

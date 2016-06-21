@@ -113,7 +113,7 @@ class MySQLEntityContainer(sqlds.SQLEntityContainer):
         ==================  ===================================
 
         All other types use the default mapping."""
-        p = simple_value.pDef
+        p = simple_value.p_def
         column_def = []
         explicit_null = False
         explicit_default = None
@@ -255,7 +255,7 @@ class MySQLStreamStore(blockstore.StreamStore):
         doc = edmx.Document()
         with file(os.path.join(os.path.dirname(__file__),
                                'odata2', 'streamstore.xml'), 'r') as f:
-            doc.Read(f)
+            doc.read(f)
         return doc.root.DataServices['StreamStoreSchema.Container']
 
     def __init__(self, db, dpath=None, **kwargs):

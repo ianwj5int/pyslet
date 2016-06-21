@@ -1,9 +1,9 @@
 #! /usr/bin/env python
 
-import pyslet.xml20081126.structures as xml
-import pyslet.xmlnames20091208 as xmlns
-import pyslet.xsdatatypes20041028 as xsi
-import pyslet.html40_19991224 as html
+import pyslet.xml.structures as xml
+import pyslet.xml.namespace as xmlns
+import pyslet.xml.xsdatatypes as xsi
+import pyslet.html401 as html
 from pyslet.rfc2396 import URI, URIFactory
 import pyslet.qtiv2.core as core
 import pyslet.qtiv2.tests as tests
@@ -34,7 +34,7 @@ class SessionActionMissing(core.QTIError):
     """Exception raised when an unrecognised action is handled by a test session."""
 
 
-class BaseType(xsi.Enumeration):
+class BaseType(xsi.EnumerationNoCase):
 
     """A base-type is simply a description of a set of atomic values (atomic to
     this specification). Note that several of the baseTypes used to define the
@@ -68,7 +68,7 @@ class BaseType(xsi.Enumeration):
 
             BaseType.DEFAULT == None
 
-    For more methods see :py:class:`~pyslet.xsdatatypes20041028.Enumeration`"""
+    For more methods see :py:class:`~pyslet.xml.xsdatatypes.Enumeration`"""
     decode = {
         'boolean': 1,
         'directedPair': 2,
@@ -82,8 +82,6 @@ class BaseType(xsi.Enumeration):
         'string': 10,
         'uri': 11
     }
-xsi.MakeEnumeration(BaseType)
-xsi.MakeLowerAliases(BaseType)
 
 
 def CheckBaseTypes(*baseType):
@@ -98,8 +96,8 @@ def CheckBaseTypes(*baseType):
             bReturn = b
         elif b != bReturn:
             raise core.ProcessingError("Base type mismatch: %s and %s" % (
-                BaseType.EncodeValue(bReturn),
-                BaseType.EncodeValue(b)))
+                BaseType.to_str(bReturn),
+                BaseType.to_str(b)))
     return bReturn
 
 
@@ -113,7 +111,7 @@ def CheckNumericalTypes(*baseType):
             continue
         elif b not in (BaseType.float, BaseType.integer):
             raise core.ProcessingError(
-                "Numeric type required, found: %s" % BaseType.EncodeValue(b))
+                "Numeric type required, found: %s" % BaseType.to_str(b))
         elif bReturn is None:
             bReturn = b
         elif b != bReturn:
@@ -148,14 +146,13 @@ class Cardinality(xsi.Enumeration):
 
             Cardinality.DEFAULT == None
 
-    For more methods see :py:class:`~pyslet.xsdatatypes20041028.Enumeration`"""
+    For more methods see :py:class:`~pyslet.xml.xsdatatypes.Enumeration`"""
     decode = {
         'multiple': 1,
         'ordered': 2,
         'record': 3,
         'single': 4
     }
-xsi.MakeEnumeration(Cardinality)
 
 
 def CheckCardinalities(*cardinality):
@@ -171,8 +168,8 @@ def CheckCardinalities(*cardinality):
             cReturn = c
         elif c != cReturn:
             raise core.ProcessingError("Cardinality mismatch: %s and %s" % (
-                Cardinality.EncodeValue(cReturn),
-                Cardinality.EncodeValue(c)))
+                Cardinality.to_str(cReturn),
+                Cardinality.to_str(c)))
     return cReturn
 
 
@@ -187,7 +184,7 @@ class ValueElement(core.QTIElement):
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'value')
     XMLATTR_baseType = (
-        'baseType', BaseType.DecodeLowerValue, BaseType.EncodeValue)
+        'baseType', BaseType.from_str_lower, BaseType.to_str)
     XMLATTR_fieldIdentifier = (
         'fieldIdentifier', core.ValidateIdentifier, lambda x: x)
     XMLCONTENT = xml.XMLMixedContent
@@ -292,7 +289,7 @@ class Value(object):
 			A dictionary with keys that are the field identifiers and
 			values that Value instances."""
 
-    def SetValue(self, value):
+    def set_value(self, value):
         """Sets the value.
 
         All single values can be set from a single text string corresponding to
@@ -300,7 +297,7 @@ class Value(object):
         escaping).  If v is a single Value instance then the following always
         leaves v unchanged::
 
-                v.SetValue(unicode(v))
+                v.set_value(unicode(v))
 
         Value instances can also be set from values of the appropriate type as
         described in :py:attr:`value`.  For base types that are represented with
@@ -316,8 +313,8 @@ class Value(object):
         """Raises a ValueError with a debug-friendly message string."""
         raise ValueError(
             "Can't set value of %s %s from %s" %
-            (Cardinality.EncodeValue(
-                self.Cardinality()), BaseType.EncodeValue(
+            (Cardinality.to_str(
+                self.Cardinality()), BaseType.to_str(
                 self.baseType), repr(value)))
 
     def Cardinality(self):
@@ -390,7 +387,7 @@ class Value(object):
     def CopyValue(cls, value):
         """Creates a new value instance copying *value*."""
         v = cls.NewValue(value.Cardinality(), value.baseType)
-        v.SetValue(value.value)
+        v.set_value(value.value)
         return v
 
 
@@ -430,7 +427,7 @@ class SingleValue(Value):
             return URIValue(value)
         else:
             raise ValueError("Unknown base type: %s" %
-                             BaseType.EncodeValue(baseType))
+                             BaseType.to_str(baseType))
 
 
 class BooleanValue(SingleValue):
@@ -441,15 +438,15 @@ class BooleanValue(SingleValue):
         super(BooleanValue, self).__init__()
         self.baseType = BaseType.boolean
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
     def __unicode__(self):
         if self.value is None:
             return u''
         else:
-            return xsi.EncodeBoolean(self.value)
+            return xsi.boolean_to_str(self.value)
 
-    def SetValue(self, value):
+    def set_value(self, value):
         """If value is a string it will be decoded according to the rules for representing
         boolean values.  Booleans and integers can be used directly in the normal python
         way but other values will raise ValueError.  To take advantage of a non-zero test
@@ -457,7 +454,7 @@ class BooleanValue(SingleValue):
 
                 # x is a value of unknown type with non-zero test implemented
                 v=BooleanValue()
-                v.SetValue(True if x else False)"""
+                v.set_value(True if x else False)"""
         if value is None:
             self.value = None
         elif isinstance(value, BooleanType):
@@ -465,7 +462,7 @@ class BooleanValue(SingleValue):
         elif type(value) in (IntType, LongType):
             self.value = True if value else False
         elif type(value) in StringTypes:
-            self.value = xsi.DecodeBoolean(value)
+            self.value = xsi.boolean_from_str(value)
         else:
             self.ValueError(value)
 
@@ -478,7 +475,7 @@ class DirectedPairValue(SingleValue):
         super(DirectedPairValue, self).__init__()
         self.baseType = BaseType.directedPair
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
     def __unicode__(self):
         if self.value is None:
@@ -486,7 +483,7 @@ class DirectedPairValue(SingleValue):
         else:
             return string.join(self.value, ' ')
 
-    def SetValue(self, value, nameCheck=False):
+    def set_value(self, value, nameCheck=False):
         """See comment on :py:meth:`Identifier.SetValue` for usage of *nameCheck*.
 
         Note that if value is a string then nameCheck is ignored and identifier
@@ -500,9 +497,9 @@ class DirectedPairValue(SingleValue):
             if type(value) in (ListType, TupleType):
                 if len(value) != 2:
                     raise ValueError("%s expected 2 values: %s" % (
-                        BaseType.EncodeValue(self.baseType), repr(value)))
+                        BaseType.to_str(self.baseType), repr(value)))
                 for v in value:
-                    if type(v) not in StringTypes or (nameCheck and not xmlns.IsValidNCName(v)):
+                    if type(v) not in StringTypes or (nameCheck and not xmlns.is_valid_ncname(v)):
                         raise ValueError("Illegal identifier %s" % repr(v))
                 self.value = (unicode(value[0]), unicode(value[1]))
             else:
@@ -528,7 +525,7 @@ class FileValue(SingleValue):
         else:
             raise NotImplementedError("String serialization of BaseType.file.")
 
-    def SetValue(
+    def set_value(
             self,
             value,
             type="application/octet-stream",
@@ -569,28 +566,28 @@ class FloatValue(SingleValue):
         super(FloatValue, self).__init__()
         self.baseType = BaseType.float
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
     def __unicode__(self):
         if self.value is None:
             return u''
         else:
-            return xsi.EncodeDouble(self.value)
+            return xsi.double_to_str(self.value)
 
-    def SetValue(self, value):
+    def set_value(self, value):
         """This method will *not* convert integers to float values, you must do
         this explicitly if you want automatic conversion, for example
         ::
 
                 # x is a numeric value that may be float or integer
                 v=FloatValue()
-                v.SetValue(float(x))"""
+                v.set_value(float(x))"""
         if value is None:
             self.value = None
         elif isinstance(value, FloatType):
             self.value = value
         elif type(value) in StringTypes:
-            self.value = xsi.DecodeDouble(value)
+            self.value = xsi.double_from_str(value)
         else:
             self.ValueError(value)
 
@@ -603,7 +600,7 @@ class DurationValue(FloatValue):
         super(DurationValue, self).__init__()
         self.baseType = BaseType.duration
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
 
 class IdentifierValue(SingleValue):
@@ -614,7 +611,7 @@ class IdentifierValue(SingleValue):
         super(IdentifierValue, self).__init__()
         self.baseType = BaseType.identifier
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
     def __unicode__(self):
         if self.value is None:
@@ -622,7 +619,7 @@ class IdentifierValue(SingleValue):
         else:
             return unicode(self.value)
 
-    def SetValue(self, value, nameCheck=True):
+    def set_value(self, value, nameCheck=True):
         """In general, to speed up computation we do not check the validity of
         identifiers unless parsing the value from a string representation (such
         as a value read from an XML input document).
@@ -635,7 +632,7 @@ class IdentifierValue(SingleValue):
         if value is None:
             self.value = None
         elif type(value) in StringTypes:
-            if not nameCheck or xmlns.IsValidNCName(value):
+            if not nameCheck or xmlns.is_valid_ncname(value):
                 self.value = unicode(value)
             else:
                 raise ValueError("Illegal identifier %s" % repr(value))
@@ -651,15 +648,15 @@ class IntegerValue(SingleValue):
         super(IntegerValue, self).__init__()
         self.baseType = BaseType.integer
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
     def __unicode__(self):
         if self.value is None:
             return u''
         else:
-            return xsi.EncodeInteger(self.value)
+            return xsi.integer_to_str(self.value)
 
-    def SetValue(self, value):
+    def set_value(self, value):
         """Note that integers and floats are distinct types in QTI: we do not
         accept floats where we would expect integers or *vice versa*.  However,
         integers are accepted from long or plain integer values provided they
@@ -674,7 +671,7 @@ class IntegerValue(SingleValue):
             else:
                 self.value = int(value)
         elif type(value) in StringTypes:
-            self.value = xsi.DecodeInteger(value)
+            self.value = xsi.integer_from_str(value)
         else:
             self.ValueError(value)
 
@@ -687,11 +684,11 @@ class PairValue(DirectedPairValue):
         super(PairValue, self).__init__()
         self.baseType = BaseType.pair
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
-    def SetValue(self, value, nameCheck=True):
+    def set_value(self, value, nameCheck=True):
         """Overrides DirectedPair's implementation to force a predictable ordering on the identifiers."""
-        super(PairValue, self).SetValue(value, nameCheck)
+        super(PairValue, self).set_value(value, nameCheck)
         if self.value and self.value[0] > self.value[1]:
             self.value = (self.value[1], self.value[0])
 
@@ -704,24 +701,24 @@ class PointValue(SingleValue):
         super(PointValue, self).__init__()
         self.baseType = BaseType.point
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
     def __unicode__(self):
         if self.value is None:
             return u''
         else:
-            return string.join(map(xsi.EncodeInteger, self.value), ' ')
+            return string.join(map(xsi.integer_to_str, self.value), ' ')
 
-    def SetValue(self, value):
+    def set_value(self, value):
         if value is None:
             self.value = None
         else:
             if type(value) in StringTypes:
-                value = map(xsi.DecodeInteger, string.split(value))
+                value = map(xsi.integer_from_str, string.split(value))
             if type(value) in (ListType, TupleType):
                 if len(value) != 2:
                     raise ValueError("%s expected 2 values: %s" % (
-                        BaseType.EncodeValue(self.baseType), repr(value)))
+                        BaseType.to_str(self.baseType), repr(value)))
                 for v in value:
                     if type(v) not in (IntType, LongType):
                         raise ValueError(
@@ -744,7 +741,7 @@ class StringValue(SingleValue):
         super(StringValue, self).__init__()
         self.baseType = BaseType.string
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
     def __unicode__(self):
         if self.value is None:
@@ -752,7 +749,7 @@ class StringValue(SingleValue):
         else:
             return unicode(self.value)
 
-    def SetValue(self, value):
+    def set_value(self, value):
         if value is None:
             self.value = None
         elif type(value) in StringTypes:
@@ -771,7 +768,7 @@ class URIValue(SingleValue):
         super(URIValue, self).__init__()
         self.baseType = BaseType.uri
         if value is not None:
-            self.SetValue(value)
+            self.set_value(value)
 
     def __unicode__(self):
         if self.value is None:
@@ -779,7 +776,7 @@ class URIValue(SingleValue):
         else:
             return unicode(self.value)
 
-    def SetValue(self, value):
+    def set_value(self, value):
         """Sets a uri value from a string or another URI instance."""
         if value is None:
             self.value = None
@@ -815,12 +812,12 @@ class Container(Value):
 
         We therefore opt for a minimal representation."""
         if self.baseType is None:
-            return u"%s container of unknown base type" % Cardinality.EncodeValue(
+            return u"%s container of unknown base type" % Cardinality.to_str(
                 self.Cardinality)
         else:
-            return u"%s container of base type %s" % (Cardinality.EncodeValue(
+            return u"%s container of base type %s" % (Cardinality.to_str(
                 self.Cardinality),
-                BaseType.EncodeValue(
+                BaseType.to_str(
                 self.baseType))
 
     @classmethod
@@ -845,7 +842,7 @@ class OrderedContainer(Container):
     def Cardinality(self):
         return Cardinality.ordered
 
-    def SetValue(self, value, baseType=None):
+    def set_value(self, value, baseType=None):
         """Sets the value of this container from a list, tuple or other
         iterable. The list must contain valid representations of *baseType*,
         items may be None indicating a NULL value in the list.  In accordance
@@ -891,7 +888,7 @@ class MultipleContainer(Container):
     def Cardinality(self):
         return Cardinality.multiple
 
-    def SetValue(self, value, baseType=None):
+    def set_value(self, value, baseType=None):
         """Sets the value of this container from a list, tuple or other
         iterable. The list must contain valid representations of *baseType*,
         items may be None indicating a NULL value in the list.  In accordance
@@ -941,7 +938,7 @@ class RecordContainer(Container):
     def Cardinality(self):
         return Cardinality.record
 
-    def SetValue(self, value):
+    def set_value(self, value):
         """Sets the value of this container from an existing dictionary in which
         the keys are the field identifiers and the values are :py:class:`Value`
         instances. You cannot parse containers from strings.
@@ -1054,9 +1051,9 @@ class VariableDeclaration(core.QTIElement):
                     </xsd:sequence>
             </xsd:group>"""
     XMLATTR_baseType = (
-        'baseType', BaseType.DecodeLowerValue, BaseType.EncodeValue)
+        'baseType', BaseType.from_str_lower, BaseType.to_str)
     XMLATTR_cardinality = (
-        'cardinality', Cardinality.DecodeLowerValue, Cardinality.EncodeValue)
+        'cardinality', Cardinality.from_str_lower, Cardinality.to_str)
     XMLATTR_identifier = ('identifier', core.ValidateIdentifier, lambda x: x)
 
     def __init__(self, parent):
@@ -1073,10 +1070,10 @@ class VariableDeclaration(core.QTIElement):
             raise TypeError(
                 "Can't compare VariableDeclaration with %s" % repr(other))
 
-    def GetChildren(self):
+    def get_children(self):
         if self.DefaultValue:
             yield self.DefaultValue
-        for child in core.QTIElement.GetChildren(self):
+        for child in core.QTIElement.get_children(self):
             yield child
 
     def content_changed(self):
@@ -1087,18 +1084,18 @@ class VariableDeclaration(core.QTIElement):
         if definedValue:
             if self.cardinality == Cardinality.single:
                 value = SingleValue.NewValue(
-                    self.baseType, definedValue.ValueElement[0].GetValue())
+                    self.baseType, definedValue.ValueElement[0].get_value())
             else:
                 value = Value.NewValue(self.cardinality, self.baseType)
                 if isinstance(value, RecordContainer):
                     # handle record processing
                     for v in definedValue.ValueElement:
                         value[v.fieldIdentifier] = SingleValue.NewValue(
-                            v.baseType, v.GetValue())
+                            v.baseType, v.get_value())
                 else:
                     # handle multiple and ordered processing
-                    value.SetValue(
-                        map(lambda v: v.GetValue(), definedValue.ValueElement))
+                    value.set_value(
+                        map(lambda v: v.get_value(), definedValue.ValueElement))
         else:
             # generate NULL values with the correct cardinality and base type
             if self.cardinality == Cardinality.single:
@@ -1136,10 +1133,10 @@ class DefinedValue(core.QTIElement):
         self.interpretation = None
         self.ValueElement = []
 
-    def GetChildren(self):
+    def get_children(self):
         return itertools.chain(
             self.ValueElement,
-            core.QTIElement.GetChildren(self))
+            core.QTIElement.get_children(self))
 
 
 class DefaultValue(DefinedValue):
@@ -1167,9 +1164,10 @@ class Mapping(core.QTIElement):
                     </xsd:sequence>
             </xsd:group>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'mapping')
-    XMLATTR_lowerBound = ('lowerBound', xsi.DecodeFloat, xsi.EncodeFloat)
-    XMLATTR_upperBound = ('upperBound', xsi.DecodeFloat, xsi.EncodeFloat)
-    XMLATTR_defaultValue = ('defaultValue', xsi.DecodeFloat, xsi.EncodeFloat)
+    XMLATTR_lowerBound = ('lowerBound', xsi.float_from_str, xsi.float_to_str)
+    XMLATTR_upperBound = ('upperBound', xsi.float_from_str, xsi.float_to_str)
+    XMLATTR_defaultValue = (
+        'defaultValue', xsi.float_from_str, xsi.float_to_str)
     XMLCONTENT = xml.ElementContent
 
     def __init__(self, parent):
@@ -1181,7 +1179,7 @@ class Mapping(core.QTIElement):
         self.baseType = BaseType.string
         self.map = {}
 
-    def GetChildren(self):
+    def get_children(self):
         return iter(self.MapEntry)
 
     def content_changed(self):
@@ -1218,18 +1216,18 @@ class Mapping(core.QTIElement):
         else:
             raise ValueError("Can't map %s" % repr(value))
         result = 0.0
-        beenThere = {}
+        been_there = {}
         dstValue = FloatValue(0.0)
         if value.baseType is None:
             # a value of unknown type results in NULL
             nullFlag = True
         for v in srcValues:
-            if v in beenThere:
+            if v in been_there:
                 # If a container contains multiple instances of the same value
                 # then that value is counted once only
                 continue
             else:
-                beenThere[v] = True
+                been_there[v] = True
             result = result + self.map.get(v, self.defaultValue)
         if nullFlag:
             # We save the NULL return up to the end to ensure that we generate errors
@@ -1241,7 +1239,7 @@ class Mapping(core.QTIElement):
                 result = self.lowerBound
             elif self.upperBound is not None and result > self.upperBound:
                 result = self.upperBound
-            dstValue.SetValue(result)
+            dstValue.set_value(result)
             return dstValue
 
 
@@ -1256,7 +1254,7 @@ class MapEntry(core.QTIElement):
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'mapEntry')
     XMLATTR_mapKey = 'mapKey'
-    XMLATTR_mappedValue = ('mappedValue', xsi.DecodeFloat, xsi.EncodeFloat)
+    XMLATTR_mappedValue = ('mappedValue', xsi.float_from_str, xsi.float_to_str)
     XMLCONTENT = xml.ElementType.Empty
 
     def __init__(self, parent):
@@ -1287,8 +1285,8 @@ class ResponseDeclaration(VariableDeclaration):
         self.Mapping = None
         self.AreaMapping = None
 
-    def GetChildren(self):
-        for child in VariableDeclaration.GetChildren(self):
+    def get_children(self):
+        for child in VariableDeclaration.get_children(self):
             yield child
         if self.CorrectResponse:
             yield self.CorrectResponse
@@ -1345,9 +1343,10 @@ class AreaMapping(core.QTIElement):
                     </xsd:sequence>
             </xsd:group>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'areaMapping')
-    XMLATTR_lowerBound = ('lowerBound', xsi.DecodeFloat, xsi.EncodeFloat)
-    XMLATTR_upperBound = ('upperBound', xsi.DecodeFloat, xsi.EncodeFloat)
-    XMLATTR_defaultValue = ('defaultValue', xsi.DecodeFloat, xsi.EncodeFloat)
+    XMLATTR_lowerBound = ('lowerBound', xsi.float_from_str, xsi.float_to_str)
+    XMLATTR_upperBound = ('upperBound', xsi.float_from_str, xsi.float_to_str)
+    XMLATTR_defaultValue = (
+        'defaultValue', xsi.float_from_str, xsi.float_to_str)
     XMLCONTENT = xml.ElementContent
 
     def __init__(self, parent):
@@ -1357,7 +1356,7 @@ class AreaMapping(core.QTIElement):
         self.defaultValue = 0.0
         self.AreaMapEntry = []
 
-    def GetChildren(self):
+    def get_children(self):
         return iter(self.AreaMapEntry)
 
     def MapValue(self, value, width, height):
@@ -1385,7 +1384,7 @@ class AreaMapping(core.QTIElement):
         else:
             raise ValueError("Can't map %s" % repr(value))
         result = 0.0
-        beenThere = [False] * len(self.AreaMapEntry)
+        been_there = [False] * len(self.AreaMapEntry)
         dstValue = FloatValue(0.0)
         if value.baseType is None:
             # a value of unknown type results in NULL
@@ -1397,10 +1396,10 @@ class AreaMapping(core.QTIElement):
             for i in xrange(len(self.AreaMapEntry)):
                 if self.AreaMapEntry[i].TestPoint(v, width, height):
                     hitPoint = True
-                    if not beenThere[i]:
+                    if not been_there[i]:
                         # When mapping containers each area can be mapped once
                         # only
-                        beenThere[i] = True
+                        been_there[i] = True
                         result = result + self.AreaMapEntry[i].mappedValue
                     break
             if not hitPoint:
@@ -1416,7 +1415,7 @@ class AreaMapping(core.QTIElement):
                 result = self.lowerBound
             elif self.upperBound is not None and result > self.upperBound:
                 result = self.upperBound
-            dstValue.SetValue(result)
+            dstValue.set_value(result)
             return dstValue
 
 
@@ -1431,7 +1430,7 @@ class AreaMapEntry(core.QTIElement, core.ShapeElementMixin):
                     <xsd:attribute name="mappedValue" type="float.Type" use="required"/>
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'areaMapEntry')
-    XMLATTR_mappedValue = ('mappedValue', xsi.DecodeFloat, xsi.EncodeFloat)
+    XMLATTR_mappedValue = ('mappedValue', xsi.float_from_str, xsi.float_to_str)
     XMLCONTENT = xml.ElementType.Empty
 
     def __init__(self, parent):
@@ -1468,15 +1467,18 @@ class OutcomeDeclaration(VariableDeclaration):
     XMLNAME = (core.IMSQTI_NAMESPACE, 'outcomeDeclaration')
     XMLATTR_view = (
         'view',
-        core.View.DecodeLowerValue,
-        core.View.EncodeValue,
+        core.View.from_str_lower,
+        core.View.to_str,
         types.DictType)
     XMLATTR_interpretation = 'interpretation'
     XMLATTR_longInterpretation = (
-        'longInterpretation', html.DecodeURI, html.EncodeURI)
-    XMLATTR_normalMaximum = ('normalMaximum', xsi.DecodeFloat, xsi.EncodeFloat)
-    XMLATTR_normalMinimum = ('normalMinimum', xsi.DecodeFloat, xsi.EncodeFloat)
-    XMLATTR_masteryValue = ('masteryValue', xsi.DecodeFloat, xsi.EncodeFloat)
+        'longInterpretation', html.uri.URI.from_octets, html.to_text)
+    XMLATTR_normalMaximum = (
+        'normalMaximum', xsi.float_from_str, xsi.float_to_str)
+    XMLATTR_normalMinimum = (
+        'normalMinimum', xsi.float_from_str, xsi.float_to_str)
+    XMLATTR_masteryValue = (
+        'masteryValue', xsi.float_from_str, xsi.float_to_str)
     XMLCONTENT = xml.ElementContent
 
     def __init__(self, parent):
@@ -1489,8 +1491,8 @@ class OutcomeDeclaration(VariableDeclaration):
         self.masteryValue = None
         self.LookupTable = None
 
-    def GetChildren(self):
-        for child in VariableDeclaration.GetChildren(self):
+    def get_children(self):
+        for child in VariableDeclaration.get_children(self):
             yield child
         if self.LookupTable:
             yield self.LookupTable
@@ -1508,10 +1510,13 @@ class LookupTable(core.QTIElement):
     XMLATTR_defaultValue = 'defaultValue'
     XMLATTR_interpretation = 'interpretation'
     XMLATTR_longInterpretation = (
-        'longInterpretation', html.DecodeURI, html.EncodeURI)
-    XMLATTR_normalMaximum = ('normalMaximum', xsi.DecodeFloat, xsi.EncodeFloat)
-    XMLATTR_normalMinimum = ('normalMinimum', xsi.DecodeFloat, xsi.EncodeFloat)
-    XMLATTR_masteryValue = ('masteryValue', xsi.DecodeFloat, xsi.EncodeFloat)
+        'longInterpretation', html.uri.URI.from_octets, html.to_text)
+    XMLATTR_normalMaximum = (
+        'normalMaximum', xsi.float_from_str, xsi.float_to_str)
+    XMLATTR_normalMinimum = (
+        'normalMinimum', xsi.float_from_str, xsi.float_to_str)
+    XMLATTR_masteryValue = (
+        'masteryValue', xsi.float_from_str, xsi.float_to_str)
     XMLCONTENT = xml.ElementContent
 
     def __init__(self, parent):
@@ -1547,7 +1552,7 @@ class MatchTable(LookupTable):
         self.MatchTableEntry = []
         self.map = {}
 
-    def GetChildren(self):
+    def get_children(self):
         return iter(self.MatchTableEntry)
 
     def content_changed(self):
@@ -1570,13 +1575,13 @@ class MatchTable(LookupTable):
         elif value.baseType != BaseType.integer:
             raise ValueError(
                 "MatchTable requires integer, found %s" %
-                BaseType.EncodeValue(
+                BaseType.to_str(
                     value.baseType))
         else:
             srcValue = value.value
         dstValue = SingleValue.NewValue(self.baseType)
         if not nullFlag:
-            dstValue.SetValue(self.map.get(srcValue, self.default.value))
+            dstValue.set_value(self.map.get(srcValue, self.default.value))
         return dstValue
 
 
@@ -1595,7 +1600,8 @@ class MatchTableEntry(core.QTIElement):
                     <xsd:attribute name="targetValue" type="valueType.Type" use="required"/>
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'matchTableEntry')
-    XMLATTR_sourceValue = ('sourceValue', xsi.DecodeInteger, xsi.EncodeInteger)
+    XMLATTR_sourceValue = (
+        'sourceValue', xsi.integer_from_str, xsi.integer_to_str)
     XMLATTR_targetValue = 'targetValue'
     XMLCONTENT = xml.ElementContent
 
@@ -1623,7 +1629,7 @@ class InterpolationTable(LookupTable):
         self.InterpolationTableEntry = []
         self.table = []
 
-    def GetChildren(self):
+    def get_children(self):
         return iter(self.InterpolationTableEntry)
 
     def content_changed(self):
@@ -1651,14 +1657,14 @@ class InterpolationTable(LookupTable):
         else:
             raise ValueError(
                 "Interpolation table requires integer or float, found %s" %
-                BaseType.EncodeValue(
+                BaseType.to_str(
                     value.baseType))
         dstValue = SingleValue.NewValue(self.baseType)
         if not nullFlag:
-            dstValue.SetValue(self.default.value)
+            dstValue.set_value(self.default.value)
             for testValue, lte, targetValue in self.table:
                 if testValue < srcValue or (lte and testValue == srcValue):
-                    dstValue.SetValue(targetValue)
+                    dstValue.set_value(targetValue)
                     break
         return dstValue
 
@@ -1684,9 +1690,9 @@ class InterpolationTableEntry(core.QTIElement):
                     <xsd:attribute name="targetValue" type="valueType.Type" use="required"/>
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'interpolationTableEntry')
-    XMLATTR_sourceValue = ('sourceValue', xsi.DecodeFloat, xsi.EncodeFloat)
+    XMLATTR_sourceValue = ('sourceValue', xsi.float_from_str, xsi.float_to_str)
     XMLATTR_includeBoundary = (
-        'includeBoundary', xsi.DecodeBoolean, xsi.EncodeBoolean)
+        'includeBoundary', xsi.boolean_from_str, xsi.boolean_to_str)
     XMLATTR_targetValue = 'targetValue'
     XMLCONTENT = xml.ElementContent
 
@@ -1710,9 +1716,9 @@ class TemplateDeclaration(VariableDeclaration):
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'templateDeclaration')
     XMLATTR_paramVariable = (
-        'paramVariable', xsi.DecodeBoolean, xsi.EncodeBoolean)
+        'paramVariable', xsi.boolean_from_str, xsi.boolean_to_str)
     XMLATTR_mathVariable = (
-        'mathVariable', xsi.DecodeBoolean, xsi.EncodeBoolean)
+        'mathVariable', xsi.boolean_from_str, xsi.boolean_to_str)
     XMLCONTENT = xml.ElementContent
 
     def __init__(self, parent):
@@ -1788,16 +1794,16 @@ class SessionState(object):
         if value.Cardinality() is not None and value.Cardinality() != v.Cardinality():
             raise ValueError(
                 "Expected %s value, found %s" %
-                (Cardinality.EncodeValue(
-                    v.Cardinality()), Cardinality.EncodeValue(
+                (Cardinality.to_str(
+                    v.Cardinality()), Cardinality.to_str(
                     value.Cardinality())))
         if value.baseType is not None and value.baseType != v.baseType:
             raise ValueError(
                 "Expected %s value, found %s" %
-                (BaseType.EncodeValue(
-                    v.baseType), BaseType.EncodeValue(
+                (BaseType.to_str(
+                    v.baseType), BaseType.to_str(
                     value.baseType)))
-        v.SetValue(value.value)
+        v.set_value(value.value)
 
     def __delitem__(self, varName):
         raise TypeError("Can't delete variables from SessionState")
@@ -1890,7 +1896,7 @@ class ItemSessionState(SessionState):
         This method sets the default RESPONSE values and completionStatus if
         this is the first attempt and increments numAttempts accordingly."""
         numAttempts = self.map['numAttempts']
-        numAttempts.SetValue(numAttempts.value + 1)
+        numAttempts.set_value(numAttempts.value + 1)
         if numAttempts.value == 1:
             # first attempt, set default responses
             for rd in self.item.ResponseDeclaration:
@@ -1898,12 +1904,12 @@ class ItemSessionState(SessionState):
                     self.map[rd.identifier + ".DEFAULT"])
             # and set completionStatus
             self.map['completionStatus'] = IdentifierValue('unknown')
-        return self.item.RenderHTML(self, htmlParent)
+        return self.item.render_html(self, htmlParent)
 
     def SaveSession(self, params, htmlParent=None):
         """Called when we wish to save unsubmitted values."""
         self._SaveParameters(params)
-        return self.item.RenderHTML(self, htmlParent)
+        return self.item.render_html(self, htmlParent)
 
     def SubmitSession(self, params, htmlParent=None):
         """Called when we wish to submit values (i.e., end an attempt)."""
@@ -1913,10 +1919,10 @@ class ItemSessionState(SessionState):
         for rd in self.item.ResponseDeclaration:
             sName = rd.identifier + ".SAVED"
             if sName in self.map:
-                self.map[rd.identifier].SetValue(self.map[sName].value)
+                self.map[rd.identifier].set_value(self.map[sName].value)
                 del self.map[sName]
         self.EndAttempt()
-        return self.item.RenderHTML(self, htmlParent)
+        return self.item.render_html(self, htmlParent)
 
     def _SaveParameters(self, params):
         orderedParams = {}
@@ -1945,7 +1951,7 @@ class ItemSessionState(SessionState):
             if rd.cardinality == Cardinality.single:
                 # We are expecting a single value from the form
                 if type(sValue) in StringTypes:
-                    v.SetValue(sValue)
+                    v.set_value(sValue)
                 else:
                     raise BadSessionParams(
                         "Unexpected multi-value submission: %s" % p)
@@ -1953,9 +1959,9 @@ class ItemSessionState(SessionState):
                 # we are expecting a simple list of values
                 if type(sValue) in StringTypes:
                     # single item list
-                    v.SetValue([sValue])
+                    v.set_value([sValue])
                 else:
-                    v.SetValue(sValue)
+                    v.set_value(sValue)
             elif rd.cardinality == Cardinality.ordered:
                 # there are two ways of setting these values, either RESPONSE.rank=VALUE
                 # or RESPONSE.VALUE=rank.  The latter representation is only valid for
@@ -1965,13 +1971,13 @@ class ItemSessionState(SessionState):
                 try:
                     if rd.baseType == BaseType.Identifier and core.ValidateIdentifier(rName[1]):
                         if type(sValue) in StringTypes:
-                            v.SetValue(sValue)
+                            v.set_value(sValue)
                         else:
                             raise ValueError
-                        rank = xsi.DecodeInteger(sValue)
+                        rank = xsi.integer_from_str(sValue)
                         sValue = rName[1]
                     else:
-                        rank = xsi.DecodeInteger(rName[1])
+                        rank = xsi.integer_from_str(rName[1])
                     if saveName in orderedParams:
                         if rank in orderedParams[saveName]:
                             # duplicate entries, we don't allow these
@@ -1996,7 +2002,7 @@ class ItemSessionState(SessionState):
                     sValue.append(rParams[r])
                 saveName = response + ".SAVED"
                 v = self.map[saveName]
-                v.SetValue(sValue)
+                v.set_value(sValue)
 
     def EndAttempt(self):
         """Called at the end of an attempt.  Invokes response processing if present."""
@@ -2041,9 +2047,9 @@ class ItemSessionState(SessionState):
             if not v:
                 if v.Cardinality() == Cardinality.single:
                     if v.baseType == BaseType.integer:
-                        v.SetValue(0)
+                        v.set_value(0)
                     elif v.baseType == BaseType.float:
-                        v.SetValue(0.0)
+                        v.set_value(0.0)
 
     def __len__(self):
         return len(self.map)
@@ -2138,6 +2144,10 @@ class TestSessionState(SessionState):
             dt = self.t
             self.t = time.time()
             dt = self.t - dt
+            if dt == 0.0:
+                # add a small time anyway
+                dt = 0.000001
+                self.t = self.t + dt
         else:
             self.t = time.time()
             dt = 0.0
@@ -2152,7 +2162,7 @@ class TestSessionState(SessionState):
         if q is None:
             return None
         else:
-            return q.FindParent(tests.TestPart)
+            return q.find_parent(tests.TestPart)
 
     def GetCurrentQuestion(self):
         """Returns the current question or None if the test is finished."""
@@ -2241,7 +2251,7 @@ class TestSessionState(SessionState):
                         iQ = iQ + 1
                     elif isinstance(part, tests.AssessmentItemRef):
                         # we've found the next question
-                        testPart = part.FindParent(tests.TestPart)
+                        testPart = part.find_parent(tests.TestPart)
                         if testPart.navigationMode == tests.NavigationMode.linear:
                             itemState = self.namespace[iQ]
                             part.SetTemplateDefaults(itemState, self)
@@ -2308,7 +2318,7 @@ class TestSessionState(SessionState):
         if self.cQuestion:
             id = self.form[self.cQuestion]
             part = self.test.GetPart(id)
-            testPart = part.FindParent(tests.TestPart)
+            testPart = part.find_parent(tests.TestPart)
             # so what type of testPart are we in?
             if testPart.navigationMode == tests.NavigationMode.linear:
                 if testPart.submissionMode == tests.SubmissionMode.individual:
@@ -2341,36 +2351,36 @@ class TestSessionState(SessionState):
 
     def CreateHTMLForm(self, htmlParent=None):
         if htmlParent:
-            div = htmlParent.ChildElement(html.Div)
+            div = htmlParent.add_child(html.Div)
         else:
             div = html.Div(None)
-        form = div.ChildElement(html.Form)
+        form = div.add_child(html.Form)
         form.method = html.Method.POST
         return div, form
 
     def AddHTMLNavigation(self, form):
         # Now add the navigation
-        nav = form.ChildElement(html.Div)
-        nav.styleClass = "navigation"
-        save = nav.ChildElement(html.Button)
+        nav = form.add_child(html.Div)
+        nav.style_class = ["navigation"]
+        save = nav.add_child(html.Button)
         save.type = html.ButtonType.submit
         save.name = "SAVE"
         save.value = self.key
-        save.AddData("_save")
+        save.add_data("_save")
         # Now we need to add the buttons that apply...
         if self.cQuestion:
             id = self.form[self.cQuestion]
             part = self.test.GetPart(id)
-            testPart = part.FindParent(tests.TestPart)
+            testPart = part.find_parent(tests.TestPart)
             # so what type of testPart are we in?
             if testPart.navigationMode == tests.NavigationMode.linear:
                 if testPart.submissionMode == tests.SubmissionMode.individual:
                     # going to the next question is a submit
-                    submit = nav.ChildElement(html.Button)
+                    submit = nav.add_child(html.Button)
                     submit.type = html.ButtonType.submit
                     submit.name = "SUBMIT"
                     submit.value = self.key
-                    submit.AddData("_next")
+                    submit.add_data("_next")
                 else:
                     raise NotImplementedError
             else:
@@ -2402,7 +2412,7 @@ class TestSessionState(SessionState):
                             if v:
                                 v.value += dt
                             else:
-                                v.SetValue(dt)
+                                v.set_value(dt)
                 iQ = iQ - 1
             # Finally, add to the total test duration
             self.namespace[0]["duration"].value += dt
@@ -2464,9 +2474,9 @@ class TestSessionState(SessionState):
             if not v:
                 if v.Cardinality() == Cardinality.single:
                     if v.baseType == BaseType.integer:
-                        v.SetValue(0)
+                        v.set_value(0)
                     elif v.baseType == BaseType.float:
-                        v.SetValue(0.0)
+                        v.set_value(0.0)
 
     def __len__(self):
         """Returns the total length of all namespaces combined."""

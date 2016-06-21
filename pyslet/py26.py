@@ -1,13 +1,14 @@
 #! /usr/bin/env python
 """Experimental module for Python 2.6 compatibility."""
 
-import sys
-import logging
 import io
+import logging
+import sys
 import zipfile
+
 from wsgiref.simple_server import ServerHandler
 
-from pyslet.py2 import is_text
+from .py2 import is_text, builtins
 
 
 py26 = sys.hexversion < 0x02070000
@@ -43,6 +44,23 @@ def is_zipfile(filename):
 
 
 if py26:
+    def get_method_function(methodlike):
+        if isinstance(methodlike, classmethod):
+            # second arg just needs to be any type
+            return methodlike.__get__(None, type).im_func
+        elif isinstance(methodlike, staticmethod):
+            return methodlike.__get__(None, type)
+        else:
+            return methodlike
+else:
+    def get_method_function(methodlike):
+        if isinstance(methodlike, (classmethod, staticmethod)):
+            return methodlike.__func__
+        else:
+            return methodlike
+
+
+if py26:
     logging.info("Adding missing constants to py26.io")
     io.SEEK_SET = 0
     io.SEEK_CUR = 1
@@ -58,3 +76,5 @@ if py26:
 
     logging.info("Patching zipfile.is_zipfile for open files")
     zipfile.is_zipfile = is_zipfile
+else:
+    memoryview = builtins.memoryview

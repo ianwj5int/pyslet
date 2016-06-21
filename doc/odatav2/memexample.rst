@@ -57,7 +57,7 @@ file when our script starts up.  Here's the source code::
 		"""Loads the metadata file from the current directory."""
 		doc=edmx.Document()
 		with open('MemCacheSchema.xml','rb') as f:
-			doc.Read(f)
+			doc.read(f)
 		return doc
 
 The metadata module contains a Document object and the definitions of
@@ -69,7 +69,7 @@ Step 2: Test the Model
 Let's write a simple test function to test our model::
 
 	def TestData(memCache):
-		with memCache.OpenCollection() as collection:
+		with memCache.open() as collection:
 			for i in xrange(26):
 				e=collection.new_entity()
 				e.set_key(str(i))
@@ -83,7 +83,7 @@ Let's write a simple test function to test our model::
 		container=InMemoryEntityContainer(doc.root.DataServices['MemCacheSchema.MemCache'])
 		memCache=doc.root.DataServices['MemCacheSchema.MemCache.KeyValuePairs']
 		TestData(memCache)
-		with memCache.OpenCollection() as collection:
+		with memCache.open() as collection:
 			for e in collection.itervalues():
 				print "%s: %s (expires %s)"%(e['Key'].value,e['Value'].value,str(e['Expires'].value))
 
@@ -132,7 +132,7 @@ AssociationSets, if required) that it contains.  It also binds internal
 implementations of the EntityCollection object to the model so that, in
 future, the EntitySet can be opened using the same API described
 previously in
-:doc:`odatav2_consumer`.  From this point on we don't need to refer to
+:doc:`consumer`.  From this point on we don't need to refer to
 the container again as we can just open the EntitySet directly from the
 model.  That object is the heart of our application, blink and you've
 missed it.
@@ -186,7 +186,7 @@ The Server object just takes the serviceRoot as a parameter on
 construction and has a :py:meth:`~pyslet.odata2.server.Server.SetModel`
 method which is used to assign the metadata document to it.  That's all
 you need to do to create it, it uses the same API described in
-:doc:`odatav2_consumer` to consume the data source and expose it via the
+:doc:`consumer` to consume the data source and expose it via the
 OData protocol.
 
 At this stage we can test it via the terminal and a browser::
@@ -236,7 +236,7 @@ add one last function to our code::
 		while True:
 			now.set_from_value(iso.TimePoint.from_now_utc())
 			logging.info("Cleanup thread running at %s",str(now.value))
-			with memCache.OpenCollection() as cacheEntries:
+			with memCache.open() as cacheEntries:
 				cacheEntries.set_filter(filter)
 				expiredList=list(cacheEntries)
 				if expiredList:
@@ -252,7 +252,7 @@ expressions are just simple trees of expression objects.  We start with
 a PropertyExpression that references a property named *Expires* and a
 literal expression with a date-time value.  DateTimeValue is just a
 sub-class of SimpleValue which was introduced in 
-:doc:`odatav2_consumer`.  Previously we've only seen simple values that
+:doc:`consumer`.  Previously we've only seen simple values that
 are part of an entity but in this case we create a standalone value to
 use in the expression.  Finally, the filter expression is created as a
 BinaryExpression using the less than operator and the operands appended.

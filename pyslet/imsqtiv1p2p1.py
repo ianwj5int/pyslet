@@ -8,12 +8,12 @@ import itertools
 import os.path
 from types import StringTypes
 
-import pyslet.xml20081126.structures as xml
-import pyslet.xml20081126.parser as xmlparser
+import pyslet.xml.structures as xml
+import pyslet.xml.parser as xmlparser
 import pyslet.imsqtiv2p1 as qtiv2
 import pyslet.imsmdv1p2p1 as imsmd
-import pyslet.html40_19991224 as html
-import pyslet.xsdatatypes20041028 as xsi
+import pyslet.html401 as html
+import pyslet.xml.xsdatatypes as xsi
 import pyslet.rfc2396 as uri
 
 from pyslet.qtiv1.core import *
@@ -45,8 +45,8 @@ class QuesTestInterop(QTICommentContainer):
         self.Assessment = None
         self.ObjectMixin = []
 
-    def GetChildren(self):
-        for child in QTICommentContainer.GetChildren(self):
+    def get_children(self):
+        for child in QTICommentContainer.get_children(self):
             yield child
         if self.ObjectBank:
             yield self.ObjectBank
@@ -86,10 +86,10 @@ class QuesTestInterop(QTICommentContainer):
                 # Add this comment to this object's metdata description
                 doc, lom, log = output[0]
                 general = lom.LOMGeneral()
-                description = general.ChildElement(general.DescriptionClass)
-                descriptionString = description.ChildElement(
+                description = general.add_child(general.DescriptionClass)
+                descriptionString = description.add_child(
                     description.LangStringClass)
-                descriptionString.SetValue(self.QTIComment.GetValue())
+                descriptionString.set_value(self.QTIComment.get_value())
         return output
 
 
@@ -122,7 +122,7 @@ class QTIDocument(xml.Document):
 
         This method is used by the XML parser.  The class object is looked up in
         the classMap, if no specialized class is found then the general
-        :py:class:`pyslet.xml20081126.Element` class is returned."""
+        :py:class:`pyslet.xml.structures.Element` class is returned."""
         return QTIDocument.classMap.get(name, QTIDocument.classMap.get(None, xml.Element))
 
     def RegisterMatThing(self, matThing):
@@ -190,8 +190,8 @@ class QTIDocument(xml.Document):
             if results:
                 # Make a directory to hold the files (makes it easier to find
                 # unique names for media files)
-                if isinstance(self.baseURI, uri.FileURL):
-                    ignore, dName = os.path.split(self.baseURI.get_pathname())
+                if isinstance(self.base_uri, uri.FileURL):
+                    ignore, dName = os.path.split(self.base_uri.get_pathname())
                 else:
                     dName = "questestinterop"
                 dName, ext = os.path.splitext(dName)
@@ -212,18 +212,18 @@ class QTIDocument(xml.Document):
                         annotation = metadata.LOMAnnotation()
                         annotationMsg = string.join(log, ';\n')
                         logging.info(annotationMsg)
-                        description = annotation.ChildElement(
+                        description = annotation.add_child(
                             imsmd.Description)
-                        description.ChildElement(
-                            description.LangStringClass).SetValue(annotationMsg)
+                        description.add_child(
+                            description.LangStringClass).set_value(annotationMsg)
                     r = doc.AddToContentPackage(cp, metadata, dName)
                     newResults.append((doc, metadata, log, r))
-                cp.manifest.Update()
+                cp.manifest.update()
             return newResults
         else:
             return []
 
-xml.MapClassElements(QTIDocument.classMap, globals())
+xml.map_class_elements(QTIDocument.classMap, globals())
 
 
 try:

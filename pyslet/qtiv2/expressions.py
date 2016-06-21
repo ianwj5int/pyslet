@@ -1,8 +1,8 @@
 #! /usr/bin/env python
 
-import pyslet.xml20081126.structures as xml
-import pyslet.xmlnames20091208 as xmlns
-import pyslet.xsdatatypes20041028 as xsi
+import pyslet.xml.structures as xml
+import pyslet.xml.namespace as xmlns
+import pyslet.xml.xsdatatypes as xsi
 import pyslet.qtiv2.core as core
 import pyslet.qtiv2.variables as variables
 
@@ -38,7 +38,7 @@ class Expression(core.QTIElement):
                 raise core.ProcessingError(
                     "Bad reference: %s is not a template variable" % ref)
         else:
-            return xsi.DecodeInteger(value)
+            return xsi.integer_from_str(value)
 
     def FloatOrTemplateRef(self, state, value):
         """Given a value of type floatOrTemplateRef this method returns the
@@ -58,7 +58,7 @@ class Expression(core.QTIElement):
                 raise core.ProcessingError(
                     "Bad reference: %s is not a template variable" % ref)
         else:
-            return xsi.DecodeDouble(value)
+            return xsi.double_from_str(value)
 
     def StringOrTemplateRef(self, state, value):
         """Given a value of type stringOrTemplateRef this method returns the
@@ -108,16 +108,16 @@ class BaseValue(Expression):
     XMLNAME = (core.IMSQTI_NAMESPACE, 'baseValue')
     XMLATTR_baseType = (
         'baseType',
-        variables.BaseType.DecodeLowerValue,
-        variables.BaseType.EncodeValue)
-    XMLCONTENT = xmlns.XMLMixedContent
+        variables.BaseType.from_str_lower,
+        variables.BaseType.to_str)
+    XMLCONTENT = xml.XMLMixedContent
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
         self.baseType = variables.BaseType.string
 
     def Evaluate(self, state):
-        return variables.SingleValue.NewValue(self.baseType, self.GetValue())
+        return variables.SingleValue.NewValue(self.baseType, self.get_value())
 
 
 class Variable(Expression):
@@ -134,7 +134,7 @@ class Variable(Expression):
     XMLATTR_identifier = ('identifier', core.ValidateIdentifier, lambda x: x)
     XMLATTR_weightIdentifier = (
         'weightIdentifier', core.ValidateIdentifier, lambda x: x)
-    XMLCONTENT = xmlns.XMLEmpty
+    XMLCONTENT = xml.XMLEmpty
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
@@ -159,7 +159,7 @@ class Default(Expression):
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'default')
     XMLATTR_identifier = ('identifier', core.ValidateIdentifier, lambda x: x)
-    XMLCONTENT = xmlns.XMLEmpty
+    XMLCONTENT = xml.XMLEmpty
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
@@ -185,7 +185,7 @@ class Correct(Expression):
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'correct')
     XMLATTR_identifier = ('identifier', core.ValidateIdentifier, lambda x: x)
-    XMLCONTENT = xmlns.XMLEmpty
+    XMLCONTENT = xml.XMLEmpty
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
@@ -219,7 +219,7 @@ class MapResponse(Expression):
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'mapResponse')
     XMLATTR_identifier = ('identifier', core.ValidateIdentifier, lambda x: x)
-    XMLCONTENT = xmlns.XMLEmpty
+    XMLCONTENT = xml.XMLEmpty
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
@@ -254,7 +254,7 @@ class MapResponsePoint(Expression):
             </xsd:attributeGroup>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'mapResponsePoint')
     XMLATTR_identifier = ('identifier', core.ValidateIdentifier, lambda x: x)
-    XMLCONTENT = xmlns.XMLEmpty
+    XMLCONTENT = xml.XMLEmpty
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
@@ -295,7 +295,7 @@ class Null(Expression):
 
             <xsd:complexType name="null.Type"/>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'null')
-    XMLCONTENT = xmlns.XMLEmpty
+    XMLCONTENT = xml.XMLEmpty
 
     def Evaluate(self, state):
         return variables.Value()
@@ -315,7 +315,7 @@ class RandomInteger(Expression):
     XMLATTR_min = 'min'
     XMLATTR_max = 'max'
     XMLATTR_step = 'step'
-    XMLCONTENT = xmlns.XMLEmpty
+    XMLCONTENT = xml.XMLEmpty
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
@@ -349,7 +349,7 @@ class RandomFloat(Expression):
     XMLNAME = (core.IMSQTI_NAMESPACE, 'randomFloat')
     XMLATTR_min = 'min'
     XMLATTR_max = 'max'
-    XMLCONTENT = xmlns.XMLEmpty
+    XMLCONTENT = xml.XMLEmpty
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
@@ -367,13 +367,13 @@ class RandomFloat(Expression):
 class NOperator(Expression):
 
     """An abstract class to help implement operators which take multiple sub-expressions."""
-    XMLCONTENT = xmlns.ElementContent
+    XMLCONTENT = xml.ElementContent
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
         self.Expression = []
 
-    def GetChildren(self):
+    def get_children(self):
         return iter(self.Expression)
 
     def EvaluateChildren(self, state):
@@ -386,13 +386,13 @@ class NOperator(Expression):
 class UnaryOperator(Expression):
 
     """An abstract class to help implement unary operators."""
-    XMLCONTENT = xmlns.ElementContent
+    XMLCONTENT = xml.ElementContent
 
     def __init__(self, parent):
         Expression.__init__(self, parent)
         self.Expression = None
 
-    def GetChildren(self):
+    def get_children(self):
         if self.Expression:
             yield self.Expression
 
@@ -423,8 +423,8 @@ class Multiple(NOperator):
             elif baseType != v.baseType:
                 raise core.ProcessingError(
                     "Mixed containers are not allowed: expected %s, found %s" %
-                    (variables.BaseType.EncodeValue(baseType),
-                     variables.BaseType.EncodeValue(
+                    (variables.BaseType.to_str(baseType),
+                     variables.BaseType.to_str(
                         v.baseType)))
             if not v:
                 # ignore NULL
@@ -440,7 +440,7 @@ class Multiple(NOperator):
                     "Ordered or Record values not allowed in Mutiple")
         # finally we have a matching list of input values
         result = variables.MultipleContainer(baseType)
-        result.SetValue(vInput)
+        result.set_value(vInput)
         return result
 
 
@@ -470,8 +470,8 @@ class Ordered(NOperator):
             elif baseType != v.baseType:
                 raise core.ProcessingError(
                     "Mixed containers are not allowed: expected %s, found %s" %
-                    (variables.BaseType.EncodeValue(baseType),
-                     variables.BaseType.EncodeValue(
+                    (variables.BaseType.to_str(baseType),
+                     variables.BaseType.to_str(
                         v.baseType)))
             if not v:
                 # ignore NULL
@@ -485,7 +485,7 @@ class Ordered(NOperator):
                     "Multiple or Record values not allowed in Ordered")
         # finally we have a matching list of input values
         result = variables.OrderedContainer(baseType)
-        result.SetValue(vInput)
+        result.set_value(vInput)
         return result
 
 
@@ -560,7 +560,7 @@ class Index(UnaryOperator):
                     </xsd:sequence>
             </xsd:group>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'index')
-    XMLATTR_n = ('n', xsi.DecodeInteger, xsi.EncodeInteger)
+    XMLATTR_n = ('n', xsi.integer_from_str, xsi.integer_to_str)
 
     def __init__(self, parent):
         UnaryOperator.__init__(self, parent)
@@ -575,13 +575,13 @@ class Index(UnaryOperator):
                     raise core.ProcessingError(
                         "Index requires n>0, found %i" % self.n)
                 elif self.n <= len(value.value):
-                    result.SetValue(value.value[self.n - 1])
+                    result.set_value(value.value[self.n - 1])
             return result
         else:
             # wrong cardinality
             raise core.ProcessingError(
                 "Index requires ordered value, found %s" %
-                variables.Cardinality.EncodeValue(
+                variables.Cardinality.to_str(
                     value.Cardinality()))
 
 
@@ -619,7 +619,7 @@ class FieldValue(UnaryOperator):
             # wrong cardinality
             raise core.ProcessingError(
                 "fieldValue requires record value, found %s" %
-                variables.Cardinality.EncodeValue(
+                variables.Cardinality.to_str(
                     value.Cardinality()))
 
 
@@ -642,12 +642,12 @@ class Random(UnaryOperator):
             result = variables.SingleValue.NewValue(value.baseType)
             if value:
                 # randomly pick one of these values
-                result.SetValue(random.choice(value.value))
+                result.set_value(random.choice(value.value))
             return result
         elif value.Cardinality() == variables.Cardinality.multiple:
             result = variables.SingleValue.NewValue(value.baseType)
             if value:
-                result.SetValue(random.choice(list(value.GetValues())))
+                result.set_value(random.choice(list(value.GetValues())))
             return result
         elif value.Cardinality() is None:
             return variables.SingleValue()
@@ -655,7 +655,7 @@ class Random(UnaryOperator):
             # wrong cardinality
             raise core.ProcessingError(
                 "Random requires multiple or ordered value, found %s" %
-                variables.Cardinality.EncodeValue(
+                variables.Cardinality.to_str(
                     value.Cardinality()))
 
 
@@ -692,7 +692,7 @@ class Member(NOperator):
             if singleValue.Cardinality() != variables.Cardinality.single:
                 raise core.ProcessingError(
                     "Expected single value, found %s" %
-                    variables.Cardinality.EncodeValue(
+                    variables.Cardinality.to_str(
                         singleValue.Cardinality()))
             if containerValue.Cardinality() == variables.Cardinality.ordered:
                 return variables.BooleanValue(
@@ -703,7 +703,7 @@ class Member(NOperator):
             else:
                 raise core.ProcessingError(
                     "Expected ordered or multiple value, found %s" %
-                    variables.Cardinality.EncodeValue(
+                    variables.Cardinality.to_str(
                         containerValue.Cardinality()))
         else:
             return variables.BooleanValue()
@@ -747,12 +747,12 @@ class Delete(NOperator):
         if singleValue.Cardinality() not in (variables.Cardinality.single, None):
             raise core.ProcessingError(
                 "Expected single value, found %s" %
-                variables.Cardinality.EncodeValue(
+                variables.Cardinality.to_str(
                     singleValue.Cardinality()))
         if containerValue.Cardinality() not in (variables.Cardinality.ordered, variables.Cardinality.multiple, None):
             raise core.ProcessingError(
                 "Expected ordered or multiple value, found %s" %
-                variables.Cardinality.EncodeValue(
+                variables.Cardinality.to_str(
                     containerValue.Cardinality()))
         result = variables.Container.NewValue(
             containerValue.Cardinality(), containerValue.baseType)
@@ -763,7 +763,7 @@ class Delete(NOperator):
             for v in containerValue.GetValues():
                 if singleValue.value != v:
                     vResult.append(v)
-            result.SetValue(vResult)
+            result.set_value(vResult)
             return result
         else:
             return result
@@ -827,7 +827,7 @@ class Contains(NOperator):
             else:
                 raise core.ProcessingError(
                     "Expected ordered or multiple value, found %s" %
-                    variables.Cardinality.EncodeValue(cardinality))
+                    variables.Cardinality.to_str(cardinality))
         else:
             return variables.BooleanValue()
 
@@ -850,7 +850,7 @@ class SubString(NOperator):
             </xsd:group>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'substring')
     XMLATTR_caseSensitive = (
-        'caseSensitive', xsi.DecodeBoolean, xsi.EncodeBoolean)
+        'caseSensitive', xsi.boolean_from_str, xsi.boolean_to_str)
 
     def __init__(self, parent):
         NOperator.__init__(self, parent)
@@ -1072,8 +1072,8 @@ class StringMatch(NOperator):
             </xsd:group>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'stringMatch')
     XMLATTR_caseSensitive = (
-        'caseSensitive', xsi.DecodeBoolean, xsi.EncodeBoolean)
-    XMLATTR_substring = ('substring', xsi.DecodeBoolean, xsi.EncodeBoolean)
+        'caseSensitive', xsi.boolean_from_str, xsi.boolean_to_str)
+    XMLATTR_substring = ('substring', xsi.boolean_from_str, xsi.boolean_to_str)
 
     def __init__(self, parent):
         NOperator.__init__(self, parent)
@@ -1169,13 +1169,15 @@ class ToleranceMode(xsi.Enumeration):
 
             ToleranceMode.DEFAULT == ToleranceMode.exact
 
-    For more methods see :py:class:`~pyslet.xsdatatypes20041028.Enumeration`"""
+    For more methods see :py:class:`~pyslet.xml.xsdatatypes.Enumeration`"""
     decode = {
         'absolute': 1,
         'exact': 2,
         'relative': 3
     }
-xsi.MakeEnumeration(ToleranceMode, 'exact')
+    aliases = {
+        None: 'exact'
+    }
 
 
 class Equal(NOperator):
@@ -1204,13 +1206,13 @@ class Equal(NOperator):
     XMLNAME = (core.IMSQTI_NAMESPACE, 'equal')
     XMLATTR_toleranceMode = (
         'toleranceMode',
-        ToleranceMode.DecodeLowerValue,
-        ToleranceMode.EncodeValue)
+        ToleranceMode.from_str_lower,
+        ToleranceMode.to_str)
     XMLATTR_tolerance = 'tolerance'
     XMLATTR_includeLowerBound = (
-        'includeLowerBound', xsi.DecodeBoolean, xsi.EncodeBoolean)
+        'includeLowerBound', xsi.boolean_from_str, xsi.boolean_to_str)
     XMLATTR_includeUpperBound = (
-        'includeUpperBound', xsi.DecodeBoolean, xsi.EncodeBoolean)
+        'includeUpperBound', xsi.boolean_from_str, xsi.boolean_to_str)
 
     def __init__(self, parent):
         NOperator.__init__(self, parent)
@@ -1284,12 +1286,14 @@ class RoundingMode(xsi.Enumeration):
 
             RoundingMode.DEFAULT == RoundingMode.significantFigures
 
-    For more methods see :py:class:`~pyslet.xsdatatypes20041028.Enumeration`"""
+    For more methods see :py:class:`~pyslet.xml.xsdatatypes.Enumeration`"""
     decode = {
         'decimalPlaces': 1,
         'significantFigures': 2
     }
-xsi.MakeEnumeration(RoundingMode, 'significantFigures')
+    aliases = {
+        None: 'significantFigures'
+    }
 
 
 class EqualRounded(NOperator):
@@ -1311,7 +1315,7 @@ class EqualRounded(NOperator):
             </xsd:group>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'equalRounded')
     XMLATTR_roundingMode = (
-        'roundingMode', RoundingMode.DecodeValue, RoundingMode.EncodeValue)
+        'roundingMode', RoundingMode.from_str, RoundingMode.to_str)
     XMLATTR_figures = 'figures'
 
     def __init__(self, parent):
@@ -1336,20 +1340,20 @@ class EqualRounded(NOperator):
             figures = self.IntegerOrTemplateRef(state, self.figures)
             if self.roundingMode == RoundingMode.decimalPlaces:
                 return variables.BooleanValue(
-                    xsi.EncodeDecimal(
+                    xsi.decimal_to_str(
                         v1v,
                         figures,
-                        False) == xsi.EncodeDecimal(
+                        False) == xsi.decimal_to_str(
                         v2v,
                         figures,
                         False))
             else:
                 # for sig fig, we need to use the double form
                 return variables.BooleanValue(
-                    xsi.EncodeDouble(
+                    xsi.double_to_str(
                         v1v,
                         figures -
-                        1) == xsi.EncodeDouble(
+                        1) == xsi.double_to_str(
                         v2v,
                         figures -
                         1))

@@ -7,10 +7,22 @@ import os.path
 from sys import maxunicode
 from pickle import dump, load
 
-from .py2 import byte, byte_value, character, join_bytes, ul
-from .py2 import force_text, is_text, is_unicode, to_text
-from .py2 import dict_values, range3, suffix, UnicodeMixin
-from .py2 import py2
+from .py2 import (
+    byte,
+    byte_value,
+    character,
+    dict_values,
+    force_text,
+    is_text,
+    is_unicode,
+    join_bytes,
+    py2,
+    range3,
+    suffix,
+    to_text,
+    ul,
+    UnicodeMixin,
+    urlopen)
 from .pep8 import PEP8Compatibility
 
 
@@ -33,9 +45,9 @@ MAGIC_TABLE = {
     # UCS-4, unusual octet order (3412)
     b'\xfe\xff\x00\x00': 'utf_32',
     # UTF-16, big-endian
-    b'\xfe\xff\x2a\x2a': 'utf_16_be',
+    b'\xfe\xff\x00\x2a': 'utf_16_be',
     # UTF-16, little-endian
-    b'\xff\xfe\x2a\x2a': 'utf_16_le',
+    b'\xff\xfe\x2a\x00': 'utf_16_le',
     # UCS-4 or other encoding with a big-endian 32-bit code unit
     b'\x00\x00\x00\x2a': 'utf_32_be',
     # UCS-4 or other encoding with a little-endian 32-bit code unit
@@ -66,7 +78,7 @@ def detect_encoding(magic):
     data.
 
     It returns a string suitable for passing to Python's native decode
-    method, e.g., 'utf-8'.  The default is 'utf-8', an encoding which
+    method, e.g., 'utf_8'.  The default is 'utf_8', an encoding which
     will also work if the data is plain ASCII."""
     if magic[0:3] == b'\xef\xbb\xbf':
         # catch this odd one first
@@ -90,6 +102,7 @@ def detect_encoding(magic):
 
 
 class CharClass(UnicodeMixin):
+
     """Represents a class of unicode characters.
 
     A class of characters is represented internally by a list of
@@ -163,6 +176,7 @@ class CharClass(UnicodeMixin):
 
     def __init__(self, *args):
         self.ranges = []
+        self._clear_cache()
         for arg in args:
             if is_text(arg):
                 # Each character in the string is put in the class
@@ -357,6 +371,7 @@ class CharClass(UnicodeMixin):
             self._merge(index_a)
         else:
             self.ranges = [[a, z]]
+        self._clear_cache()
 
     def subtract_range(self, a, z):
         """Subtracts a range of characters from the character class"""
@@ -441,6 +456,7 @@ class CharClass(UnicodeMixin):
                 # We need to remove the ranges from index_a to index_z-1.
                 # Note that if index_a==index_z then no ranges are removed
                 del self.ranges[index_a:index_z]
+        self._clear_cache()
 
     def add_char(self, c):
         """Adds a single character to the character class"""
@@ -452,6 +468,7 @@ class CharClass(UnicodeMixin):
                 self._merge(index)
         else:
             self.ranges = [[c, c]]
+        self._clear_cache()
 
     def subtract_char(self, c):
         """Subtracts a single character from the character class"""
@@ -472,6 +489,7 @@ class CharClass(UnicodeMixin):
                     self.ranges[index][1] = character(ord(c) - 1)
                     self.ranges.insert(index + 1,
                                        [character(ord(c) + 1), z])
+        self._clear_cache()
 
     def add_class(self, c):
         """Adds all the characters in c to the character class
@@ -484,17 +502,29 @@ class CharClass(UnicodeMixin):
             # take a short cut here, if we have no ranges yet just copy them
             for r in c.ranges:
                 self.ranges.append(r)
+        self._clear_cache()
 
     def subtract_class(self, c):
         """Subtracts all the characters in c from the character class"""
         for r in c.ranges:
             self.subtract_range(r[0], r[1])
+        self._clear_cache()
 
     def negate(self):
-        """Negates this character class"""
+        """Negates this character class
+
+        As a convenience returns the object as the result enabling
+        this method to be used in construction, e.g.::
+
+            c = CharClass('\x0a\x0d').negate()
+
+        Results in the class of all characters *except* line feed and
+        carriage return."""
         max = CharClass([character(0), character(maxunicode)])
         max.subtract_class(self)
         self.ranges = max.ranges
+        self._clear_cache()
+        return self
 
     def _merge(self, index):
         """Used internally to merge the range at index with its
@@ -506,7 +536,7 @@ class CharClass(UnicodeMixin):
             if ord(ap) >= ord(a) - 1:
                 # Left merge
                 index_a = index_a - 1
-        elif index_z < len(self.ranges) - 1:
+        if index_z < len(self.ranges) - 1:
             zn = self.ranges[index_z + 1][0]
             if ord(zn) <= ord(z) + 1:
                 # Right merge
@@ -517,16 +547,96 @@ class CharClass(UnicodeMixin):
                 index_a:index_z + 1] = [[self.ranges[index_a][0],
                                          self.ranges[index_z][1]]]
 
+    def _clear_cache(self):
+        self._block_cache = [None] * 256
+
     def test(self, c):
         """Test a unicode character.
 
         Returns True if the character is in the class.
 
-        If c is None, False is returned."""
+        If c is None, False is returned.
+
+        This function uses an internal cache to speed up tests of
+        complex classes.  Test results are cached in 256 character
+        blocks.  The cache does not require a lock to make this method
+        thread-safe (a lock would have a significant performance
+        penalty) as it uses a simple python list.  The worst case race
+        condition would result in two separate threads calculating the
+        same block simultaneously and assigning it the same slot in the
+        cache but python's list object is thread-safe under assignment
+        (and the two calculated blocks will be identical) so this is not
+        an issue.
+
+        Why does this matter?  This function is called a lot,
+        particularly when parsing XML.  When parsing a tag the parser
+        will repeatedly test each character to determine if it is a
+        valid name character and the definition of name character is
+        complex.  Here are some illustrative figures calculated using
+        cProfile for a typical 1MB XML file which calls test 142198
+        times: with no cache 0.42s spent in test, with the cache 0.11s
+        spent."""
         if c is None:
             return False
         elif self.ranges:
-            match, index = self._bisection_search(c, 0, len(self.ranges) - 1)
+            cv = ord(c)
+            block_num = cv >> 8
+            try:
+                block = self._block_cache[block_num]
+                if block is None:
+                    block = bytearray(256)
+                    ccode = block_num * 256
+                    match, index = self._bisection_search(
+                        character(ccode), 0, len(self.ranges) - 1)
+                    # match == True means we're in the indexed range
+                    # match == False means indexed range is after us
+                    block[0] = match
+                    if index < len(self.ranges):
+                        rmatch = self.ranges[index]
+                        cmin = ord(rmatch[0])
+                        cmax = ord(rmatch[1])
+                    else:
+                        rmatch = False
+                    for i in range3(1, 256):
+                        ccode += 1
+                        if match:
+                            # have we left this range?
+                            if ccode > cmax:
+                                index += 1
+                                if index < len(self.ranges):
+                                    rmatch = self.ranges[index]
+                                    cmin = ord(rmatch[0])
+                                    cmax = ord(rmatch[1])
+                                else:
+                                    rmatch = None
+                                match = False
+                            else:
+                                block[i] = True
+                                continue
+                        # have we entered this range
+                        if rmatch and ccode >= cmin:
+                            block[i] = True
+                            match = True
+                    self._block_cache[block_num] = block
+                block_pos = cv & 0xFF
+                if block[block_pos]:
+                    return True
+                else:
+                    return False
+            except IndexError:
+                # deal with wide Unicode characters using standard search
+                match, index = self._bisection_search(
+                    c, 0, len(self.ranges) - 1)
+                return match
+        else:
+            return False
+
+    def test_slow(self, c):
+        if c is None:
+            return False
+        elif self.ranges:
+            match, index = self._bisection_search(
+                c, 0, len(self.ranges) - 1)
             return match
         else:
             return False
@@ -585,7 +695,7 @@ def parse_category_table():
     mark_minor_category = None
     n_major_cat = _get_cat_class(u'C')
     n_minor_cat = _get_cat_class(u'Cn')
-    for line in py2.urlopen(UCDDatabaseURL).readlines():
+    for line in urlopen(UCDDatabaseURL).readlines():
         # disregard any comments
         line = to_text(line)
         line = line.split('#')[0]
@@ -662,7 +772,7 @@ def parse_block_table():
     global UCDBlocks
     UCDBlocks = {}
     narrow_warning = False
-    for line in py2.urlopen(UCDBlockDatabaseURL).readlines():
+    for line in urlopen(UCDBlockDatabaseURL).readlines():
         line = to_text(line)
         line = line.split('#')[0].strip()
         if not line:
@@ -694,6 +804,7 @@ def parse_block_table():
 
 
 class ParserError(ValueError):
+
     """Exception raised by :class:`BasicParser`
 
     production
@@ -729,8 +840,101 @@ class ParserError(ValueError):
         ValueError.__init__(self, msg)
 
 
-class BasicParser(PEP8Compatibility):
-    """An abstract class for parsing character strings or binary data
+class ParserMixin(object):
+
+    """A mix-in class for parsing
+
+    These methods help establish a common pattern across parsers by
+    providing a conversion between look-ahead and non-look ahead style
+    parsing methods.
+
+    Derived classes must define the following.
+
+        parser_error
+            a method for raising an error detected during parsing that
+            takes an optional character string describing the production
+            being parsed.
+
+        match_end
+            a method for determining if the parser has consumed all
+            the input.
+
+        pos
+            an attribute containing the current position
+
+        setpos
+            a method for setting *pos* from a previously saved value."""
+
+    def require_production(self, result, production=None):
+        """Returns *result* if not None or raises ParserError.
+
+            result
+                The result of a parse_* type method.
+
+            production
+                Optional string used to customise the error message.
+
+        This method is intended to be used as a conversion function
+        allowing any parse_* method to be converted into a require_*
+        method.  E.g.::
+
+            p = BasicParser("hello")
+            num = p.require_production(p.parse_integer(), "Number")
+
+            ParserError: Expected Number at [0]"""
+        if result is None:
+            self.parser_error(production)
+        else:
+            return result
+
+    def parse_production(self, require_method, *args, **kwargs):
+        """Executes the bound method *require_method*.
+
+            require_method
+                A bound method that will be called with \*args
+
+            args
+                The positional arguments to pass to require_method
+
+            kwargs
+                The keyword arguments to pass to require_method
+
+        This method is intended to be used as a conversion function
+        allowing any require_* method to be converted into a parse_*
+        method for the purposes of look-ahead.
+
+        If successful the result of the method is returned.  If any
+        ValueError (including :class:`ParserError`) is raised, the
+        exception is caught, the parser rewound and None is returned."""
+        savepos = self.pos
+        try:
+            return require_method(*args, **kwargs)
+        except ValueError:
+            self.setpos(savepos)
+            return None
+
+    def require_end(self, production='end'):
+        """Tests that the parser has consumed all the source
+
+        There is no return result."""
+        if not self.match_end():
+            self.parser_error(production)
+
+    def require_production_end(self, result, production=None):
+        """Returns *result* if not None and parsing is complete.
+
+        This method is similar to :meth:`require_production` except that
+        it enforces the constraint that the entire source must have been
+        parsed.  Essentially, it just calls :meth:`require_end` before
+        returning *result*."""
+        result = self.require_production(result, production)
+        self.require_end(production)
+        return result
+
+
+class BasicParser(ParserMixin, PEP8Compatibility):
+
+    """A base class for parsing character strings or binary data
 
     source
         Can be either a string of characters or a string of bytes.
@@ -765,7 +969,7 @@ class BasicParser(PEP8Compatibility):
             element was parsed successfully.  This type of method is
             intended for fairly simple productions, e.g.,
             :meth:`parse_integer`. More complex productions are
-            implemented using require_\* methods but the general
+            implemented using require\_* methods but the general
             :meth:`parse_production` can be used to enable more complex
             look-ahead scenarios.
 
@@ -884,65 +1088,6 @@ class BasicParser(PEP8Compatibility):
             self.setpos(e.pos)
         raise e
 
-    def require_production(self, result, production=None):
-        """Returns *result* if not None or raises ParserError.
-
-            result
-                The result of a parse_* type method.
-
-            production
-                Optional string used to customise the error message.
-
-        This method is intended to be used as a conversion function
-        allowing any parse_* method to be converted into a require_*
-        method.  E.g.::
-
-            p = BasicParser("hello")
-            num = p.require_production(p.parse_integer(), "Number")
-
-            ParserError: Expected Number at [0]"""
-        if result is None:
-            self.parser_error(production)
-        else:
-            return result
-
-    def require_production_end(self, result, production=None):
-        """Returns *result* if not None and parsing is complete.
-
-        This method is similar to :meth:`require_production` except that
-        it enforces the constraint that the entire source must have been
-        parsed.  Essentially, it just calls :meth:`require_end` before
-        returning *result*."""
-        result = self.require_production(result, production)
-        self.require_end(production)
-        return result
-
-    def parse_production(self, require_method, *args, **kwargs):
-        """Executes the bound method *require_method*.
-
-            require_method
-                A bound method that will be called with \*args
-
-            args
-                The positional arguments to pass to require_method
-
-            kwargs
-                The keyword arguments to pass to require_method
-
-        This method is intended to be used as a conversion function
-        allowing any require_* method to be converted into a parse_*
-        method for the purposes of look-ahead.
-
-        If successful the result of the method is returned.  If any
-        ValueError (including :class:`ParserError`) is raised, the
-        exception is caught, the parser rewound and None is returned."""
-        savepos = self.pos
-        try:
-            return require_method(*args, **kwargs)
-        except ValueError:
-            self.setpos(savepos)
-            return None
-
     def peek(self, nchars):
         """Returns the next *nchars* characters or bytes.
 
@@ -953,13 +1098,6 @@ class BasicParser(PEP8Compatibility):
     def match_end(self):
         """True if all of :attr:`src` has been parsed"""
         return self.the_char is None
-
-    def require_end(self, production='end'):
-        """Tests that all of :attr:`src` has been parsed
-
-        There is no return result."""
-        if self.the_char is not None:
-            self.parser_error(production)
 
     def match(self, match_string):
         """Returns true if *match_string* is at the current position"""
@@ -1049,7 +1187,11 @@ class BasicParser(PEP8Compatibility):
         return result
 
     def match_one(self, match_chars):
-        """Returns true if one of *match_chars* is at the current position"""
+        """Returns true if one of *match_chars* is at the current position.
+
+        The 'in' operator is used to test match_chars so this can be a
+        list or tuple of characters (or bytes), it does not have to be
+        string."""
         if self.the_char is None:
             return False
         else:
@@ -1059,7 +1201,7 @@ class BasicParser(PEP8Compatibility):
         """Parses one of *match_chars*.
 
         match_chars
-            A *string* of characters or bytes
+            A *string* (list or tuple) of characters or bytes
 
         Returns the character (or byte) or None if no match is found.
 
@@ -1073,7 +1215,7 @@ class BasicParser(PEP8Compatibility):
             c = parser.parse_one(b"+-")
             if c == byte(b"+"):
                 # do plus thing...
-            elif c:
+            elif c is not None:
                 # must be minus...
             else:
                 # do something else...

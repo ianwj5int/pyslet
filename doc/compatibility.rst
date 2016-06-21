@@ -56,15 +56,46 @@ definitions that target the particular idioms I've used in the package.
 
 :doc:`py2`
 
+Although the package can't be built for distribution or installed using
+pip or setup.py (yet), if you use the source distribution you can
+successfully import the following modules in Python 3 (in addition to
+the compatibility modules described elsewhere on this page)::
+
+    pyslet.blockstore
+    pyslet.html401
+    pyslet.http.*
+    pyslet.info
+    pyslet.iso8601
+    pyslet.odata2.*
+    pyslet.rfc2396
+    pyslet.rfc4287
+    pyslet.rfc5023
+    pyslet.streams    
+    pyslet.unicode5
+    pyslet.urn
+    pyslet.vfs
+    pyslet.xml.*
+
+The unittest script (and the tox configuration) has been modified to
+enable Python3 compatibility to be checked with::
+
+    tox -e py35
+    
+which shoud now succeed if you have Python 3.5 and tox installed on your
+system.
+
 
 PEP-8
 ~~~~~
 
 The code is not currently PEP-8 compliant but it is slowly being
-refactored for compliance as modules are touched during development. 
-Where critical, methods are renamed from CamelCase to PEP-8 compliant
-lower_case_form then the old names are defined as wrappers which raise
-deprecation warnings.
+refactored for compliance as modules are touched during development,
+particularly during Python 3 conversion work. Where critical, methods
+are renamed from CamelCase to PEP-8 compliant lower_case_form then the
+old names are defined as wrappers which raise deprecation warnings.
+
+You can test your code with the -Wd option to python to check the
+warning messages in case you are relying on the old-style names.
 
 For more information see:
 

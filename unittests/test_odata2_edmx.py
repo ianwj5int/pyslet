@@ -4,7 +4,7 @@ import logging
 import unittest
 import os
 
-import pyslet.xml20081126.structures as xml
+import pyslet.xml.structures as xml
 import pyslet.rfc2396 as uri
 
 import pyslet.odata2.csdl as edm
@@ -60,11 +60,11 @@ class EDMXTests(unittest.TestCase):
                 continue
             logging.debug("testing valid Edmx file %s", fName)
             f = uri.URI.from_path(os.path.join(dpath, fName))
-            doc = edmx.Document(baseURI=f)
+            doc = edmx.Document(base_uri=f)
             try:
-                doc.Read()
+                doc.read()
                 doc.validate()
-            except (edm.ModelError, edm.DuplicateName), e:
+            except (edm.ModelError, edm.DuplicateName) as e:
                 self.fail("%s is valid but raised "
                           "InvalidMetadataDocument: %s" % (fName, str(e)))
 
@@ -75,9 +75,9 @@ class EDMXTests(unittest.TestCase):
                 continue
             logging.debug("testing invalid Edmx file %s", fName)
             f = uri.URI.from_path(os.path.join(dpath, fName))
-            doc = edmx.Document(baseURI=f)
+            doc = edmx.Document(base_uri=f)
             try:
-                doc.Read()
+                doc.read()
                 doc.validate()
                 self.fail("%s is invalid but did not raise "
                           "InvalidMetadataDocument" % fName)

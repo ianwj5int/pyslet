@@ -29,18 +29,18 @@ def fetch_url(url, username=None, password=None):
         cred.password = password
         cred.protectionSpace = url.get_canonical_root()
         mgr.add_credentials(cred)
-    doc = edmx.Document(baseURI=url, reqManager=mgr)
-    doc.Read()
+    doc = edmx.Document(base_uri=url, reqManager=mgr)
+    doc.read()
     mgr.close()
-    if not doc.root.GetBase():
-        doc.root.SetBase(url)
+    if not doc.root.get_base():
+        doc.root.set_base(url)
     return doc
 
 
 def load_file(filename):
     doc = edmx.Document()
     with open(filename, 'rb') as f:
-        doc.Read(f)
+        doc.read(f)
     return doc
 
 
@@ -49,7 +49,7 @@ def save_file(doc, filename):
     with io.FileIO(filename, "w") as f:
         with io.BufferedWriter(f) as bf:
             with io.TextIOWrapper(bf, encoding="utf-8") as tf:
-                doc.Create(tf)
+                doc.create(tf)
 
 
 def splitlists(old_list, new_list):
@@ -168,8 +168,8 @@ def navdiff(oldnp, newnp, backlinks=False):
         logging.info("%s.%s Navigation target multiplicity changed "
                      "from %s to %s",
                      oldnp.parent.name, oldnp.name,
-                     edm.EncodeMultiplicity(oldnp.to_end.multiplicity),
-                     edm.EncodeMultiplicity(newnp.to_end.multiplicity))
+                     edm.multiplicity_to_str(oldnp.to_end.multiplicity),
+                     edm.multiplicity_to_str(newnp.to_end.multiplicity))
     if backlinks:
         old_backname = new_backname = None
         if oldnp.backLink is not None:
@@ -218,7 +218,7 @@ if __name__ == '__main__':
             old_doc = load_file(args[0])
             if options.url is None:
                 # use the base of old_doc
-                url = old_doc.root.GetBase()
+                url = old_doc.root.get_base()
                 if url is None:
                     sys.exit("xml:base undefined, try again with -s SERVICE")
                 new_doc = fetch_url(url, username, password)

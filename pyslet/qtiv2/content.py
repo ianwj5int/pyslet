@@ -1,8 +1,8 @@
 #! /usr/bin/env python
 
-import pyslet.xml20081126.structures as xml
-import pyslet.xmlnames20091208 as xmlns
-import pyslet.html40_19991224 as html
+import pyslet.xml.structures as xml
+import pyslet.xml.namespace as xmlns
+import pyslet.html401 as html
 
 import pyslet.qtiv2.core as core
 
@@ -26,32 +26,31 @@ class BodyElement(core.QTIElement):
                     <xsd:attribute name="label" type="string256.Type" use="optional"/>
             </xsd:attributeGroup>"""
     XMLATTR_id = ('id', core.ValidateIdentifier, lambda x: x)
-    XMLATTR_class = 'styleClass'
+    XMLATTR_class = ('style_class', None, None, list)
     XMLATTR_label = 'label'
 
     def __init__(self, parent):
         core.QTIElement.__init__(self, parent)
         self.id = None
-        self.styleClass = None
         self.label = None
 
-    def RenderHTML(self, parent, profile, itemState):
+    def render_html(self, parent, profile, itemState):
         """Renders this element in html form, adding nodes to *parent*.  This
         method effectively overrides
-        :py:class:`html40_19991224.XHTMLElement.RenderHTML` enabling QTI and
+        :py:class:`html401.XHTMLElement.render_html` enabling QTI and
         XHTML elements to be mixed freely.
 
         The state of the item (e.g., the values of any controls), is taken from
         *itemState*, a :py:class:`variables.ItemSessionState` instance."""
-        raise NotImplementedError(self.__class__.__name__ + ".RenderHTML")
+        raise NotImplementedError(self.__class__.__name__ + ".render_html")
 
     def RenderHTMLChildren(self, parent, profile, itemState):
         """Renders this element's children to an external document represented by the *parent* node"""
-        for child in self.GetChildren():
+        for child in self.get_children():
             if type(child) in StringTypes:
-                parent.AddData(child)
+                parent.add_data(child)
             else:
-                child.RenderHTML(parent, profile, itemState)
+                child.render_html(parent, profile, itemState)
 
 
 TextElements = {
@@ -137,8 +136,8 @@ def FixHTMLNamespace(e):
     if e.ns == html.XHTML_NAMESPACE:
         name = (core.IMSQTI_NAMESPACE, e.xmlname.lower())
         if name in core.QTIDocument.classMap:
-            e.SetXMLName(name)
-    for e in e.GetChildren():
+            e.set_xmlname(name)
+    for e in e.get_children():
         if type(e) in StringTypes:
             continue
         FixHTMLNamespace(e)
@@ -160,11 +159,11 @@ class ItemBody(BodyElement):
                     </xsd:sequence>
             </xsd:group>"""
     XMLNAME = (core.IMSQTI_NAMESPACE, 'itemBody')
-    XMLCONTENT = xmlns.ElementContent
+    XMLCONTENT = xml.ElementContent
 
-    def ChildElement(self, childClass, name=None):
+    def add_child(self, childClass, name=None):
         if issubclass(childClass, html.BlockMixin):
-            return BodyElement.ChildElement(self, childClass, name)
+            return BodyElement.add_child(self, childClass, name)
         else:
             raise core.QTIValidityError(
                 "%s (%s) in %s" %
@@ -172,15 +171,15 @@ class ItemBody(BodyElement):
                  childClass.__name__,
                  self.__class__.__name__))
 
-    def RenderHTML(self, parent, profile, itemState):
-        """Overrides :py:meth:`BodyElement.RenderHTML`, the result is always a
+    def render_html(self, parent, profile, itemState):
+        """Overrides :py:meth:`BodyElement.render_html`, the result is always a
         Div with class set to "itemBody".  Unlike other such method *parent* may
         by None, in which case a new parentless Div is created."""
         if parent:
-            htmlDiv = parent.ChildElement(html.Div)
+            htmlDiv = parent.add_child(html.Div)
         else:
             htmlDiv = html.Div(None)
-        htmlDiv.styleClass = "itemBody"
+        htmlDiv.style_class = ["itemBody"]
         self.RenderHTMLChildren(htmlDiv, profile, itemState)
 
 
@@ -194,7 +193,7 @@ class FlowContainerMixin:
         This is similar to the algorithm we use in HTML flow containers,
         suppressing pretty printing if we have inline elements (ignoring
         non-trivial data).  This could be refactored in future."""
-        for child in self.GetChildren():
+        for child in self.get_children():
             if type(child) in StringTypes:
                 for c in child:
                     if not xml.is_s(c):

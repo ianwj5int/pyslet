@@ -5,8 +5,8 @@ References:
 
 """
 
-import pyslet.xml20081126.structures as xml
-import pyslet.xsdatatypes20041028 as xsi
+import pyslet.xml.structures as xml
+import pyslet.xml.xsdatatypes as xsi
 import string
 import itertools
 
@@ -287,7 +287,7 @@ def FormatTrueFalseEnum(value):
         return None
 
 
-class QMLAlignEnum:
+class QMLAlignEnum(xsi.Enumeration):
     decode = {
         'Left': 1,
         'Right': 2,
@@ -295,7 +295,6 @@ class QMLAlignEnum:
         'Bottom': 4,
         'Middle': 5
     }
-xsi.MakeEnumeration(QMLAlignEnum)
 
 
 def ParseAlignEnum(value):
@@ -327,7 +326,7 @@ def FormatAlignEnum(value):
     return QMLAlignEnum.encode.get(value, None)
 
 
-class QMLShuffleEnum:
+class QMLShuffleEnum(xsi.Enumeration):
     decode = {
         'N': 1,
         'NO': 2,
@@ -338,7 +337,6 @@ class QMLShuffleEnum:
         'T': 7,
         'EXCEPT_LAST_TWO': 8
     }
-xsi.MakeEnumeration(QMLShuffleEnum)
 
 
 def ParseShuffleEnum(value):
@@ -405,13 +403,12 @@ def FormatYesNoEnum(value):
         return None
 
 
-class QMLDirectionEnum:
+class QMLDirectionEnum(xsi.Enumeration):
     decode = {
         'VERT': 1,
         'HORZ': 2,
         'FLASH': 3
     }
-xsi.MakeEnumeration(QMLDirectionEnum)
 
 
 def ParseDirectionEnum(value):
@@ -530,7 +527,7 @@ class QMLQuestion(QMLElement):
         self.QMLAnswer = None
         self.QMLOutcome = []
 
-    def GetChildren(self):
+    def get_children(self):
         for child in itertools.chain(
                 self.QMLTag,
                 self.QMLComment,
@@ -562,15 +559,15 @@ class QMLTag(QMLElement):
         self.name = None
         self.value = None
 
-    def GetValue(self):
+    def get_value(self):
         return self.value
 
-    def SetValue(self, value):
+    def set_value(self, value):
         self.value = value
 
     def GotChildren(self):
         # called when all children have been parsed
-        self.value = ParseNameString(QMLElement.GetValue(self))
+        self.value = ParseNameString(QMLElement.get_value(self))
 
 
 class QMLComment(QMLElement):
@@ -717,7 +714,7 @@ class QMLAnswer(QMLElement):
         self.maxResponse = None
         self.QMLAnswerThing = []
 
-    def GetChildren(self):
+    def get_children(self):
         for child in self.QMLAnswerThing:
             yield child
 
@@ -750,7 +747,7 @@ class QMLChoice(QMLAnswerThing):
         self.QMLOption = []
         self.QMLContent = QMLContent(self)
 
-    def GetChildren(self):
+    def get_children(self):
         for child in self.QMLOption:
             yield child
         yield self.QMLContent
@@ -809,7 +806,7 @@ class QMLOutcome(QMLElement):
         self.QMLCondition = QMLCondition(self)
         self.QMLContent = QMLContent(self)
 
-    def GetChildren(self):
+    def get_children(self):
         yield self.QMLCondition
         yield self.QMLContent
 
@@ -836,8 +833,8 @@ class QMLDocument(xml.Document):
 
         This method is used by the XML parser.  The class object is looked up in
         :py:attr:`classMap`, if no specialized class is found then the general
-        :py:class:`pyslet.xml20081126.Element` class is returned."""
+        :py:class:`pyslet.xml.structures.Element` class is returned."""
         return QMLDocument.classMap.get(name, QMLDocument.classMap.get(None, xml.Element))
 
 
-xml.MapClassElements(QMLDocument.classMap, globals())
+xml.map_class_elements(QMLDocument.classMap, globals())

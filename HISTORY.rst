@@ -6,8 +6,11 @@ being made to methods and class attributes with each release.  There is
 a module, pyslet.pep8, which contains a compatibility class for
 remapping missing class attribute names to their new forms and
 generating deprecation warnings, run your code with "python -Wd" to
-force these warnings to appear.  If/When Pyslet makes the transition to
-Python 3 the old names will go away completely. 
+force these warnings to appear.  As Pyslet makes the transition to
+Python 3 some of the old names may go away completely.  The warning
+messages explain any changes you need to make.  Although backwards
+compatible, using the new names is slightly faster as they don't go
+through the extra deprecation wrapper.
  
 It is still possible that some previously documented names could now
 fail (module level functions, function arguments, etc.) but I've tried
@@ -31,9 +34,10 @@ Version Numbering
 Pyslet version numbers use the check-in date as their last component so
 you can always tell if one build is newer than another.  At the moment
 there is only one actively maintained branch of the code: version '0".
-Changes are reported against the versions released to PyPi.  'XX' at the
-end of the version indicates changes that have not yet been released to
-PyPi but have been committed to the master branch (with tests passing).
+Changes are reported against the versions released to PyPi.  The main
+version number increases with each PyPi release.  Starting with version
+0.7 changes are documented in order of build date to make it easier to
+see what is changing in the master branch on GitHub.
 
 Not sure which version you are using?  Try::
 
@@ -41,7 +45,163 @@ Not sure which version you are using?  Try::
     print version
 
 
-Version 0.6.2015XXXX
+Version 0.7
+-----------
+
+Warning: for future compatibility with Python 3 you should ensure that
+you use the bytes type (and the 'b' prefix on any string constants) when
+initialising OData entity properties of type Edm.Binary.  Failure to do
+so will raise an error in Python 3.
+
+
+Build 20160405:
+
+#38 Python 3 compatibility work (ongoing)
+
+OData v2 memds/sqlds/client/server and blockstore modules: tests passing
+in Python 3.
+
+Untracked changes:
+
+Fixed a bug in the detect_encoding function in unicode5 module (most
+likely benign).
+
+
+Build 20160327:
+
+#3 PEP-8 driven refactoring (ongoing)
+
+OData v2 core, csdl, edmx and metadata modules refactored to use new
+method decorators and for PEP-8 compliance.
+
+OData v2 docs reorganised into a separate directory for clarity.
+
+#38 Python 3 compatibility work (ongoing)
+
+OData v2 core, csdl, edmx and metadata modules refactored, Python 3
+tests passing
+
+
+Build 20160313:
+
+#3 PEP-8 driven refactoring (ongoing)
+
+HTML module renamed to html401 and refactored with significantly
+increased test coverage.  Atom module (rfc4287) refactored.
+
+#38 Python 3 compatibility work (ongoing)
+
+rfc4287, rfc5023 and html401 modules migrated and tests passing.
+
+
+Untracked fixes:
+
+Deprecated XML Element construction with name override to improve
+handling of super.
+
+Fixed broken legacy name Expand in OData package.  Bug introduced with
+improvements to method decorators in 20160223 build.
+
+Fixed a bug in the parsing of HTML content where unexpected elements
+that belong in the <head> were causing any preceding <body> content to
+be ignored.  Added the get_or_add_child method to XML Elements to deal
+with cases where add_child's 'reset' of the elements children is
+undesired.
+
+Fixed a bug in the XML parser where the parsed DTD was not being set
+in the Document instance.
+
+ 
+Build 20160225:
+ 
+#3 PEP-8 driven refactoring (ongoing)
+
+Refactored the xml namespace and xsdatatyeps modules into the xml
+sub-package.
+
+Removed any in-package deprecation warnings caused by previous method
+renaming in xml sub-package.
+
+Updated and completed move to new decorators for method renames. 
+Modified metaclass to surpress inherited documentation for renamed
+methods.  This was causing legacy names to be documented for all
+sub-classes and not just the class using the @old_method decorator.
+
+#38 Python 3 compatibility work (ongoing)
+
+Added namespace and xsdatatypes modules in xml sub-package to list of
+Python 3 compatible modules.
+
+Untracked fixes:
+
+CDATA sections were not being generated properly by the (old) function
+:meth:`pyslet.xml.structures.EscapeCDSect`, causing the HTML style
+and script tags to have their content rendered incorrectly.  These tags
+are not part of the QTI content model so this bug is unlikely to have
+had an impact on real data.
+
+XMLEntity class is now a context manager to help ensure that files are
+closed before garbage collection.  Unittests were triggering resource
+leak warnings in Python 3.
+
+Use of nested generators was triggering future warnings in Python 3,
+refactored to catch StopIteration as per:
+https://www.python.org/dev/peps/pep-0479/
+
+
+Build 20160221:
+
+#3 PEP-8 driven refactoring (ongoing)
+
+Added a new metaclass-based solution to enable method renaming while
+maintaining support for derived classes that override using the old
+names.  Crazy I know, but it works.
+
+Refactored xml sub-package, including renaming it.  The old name is
+supported through a small compatibility module.
+
+
+#38 Python 3 compatibility work
+
+http sub-package.  All tests now passing, including cookie module.
+Overall, Python 3 support in this sub-package should be considered alpha
+standard.  It is likely that some further fix-ups will be needed once
+the higher-level modules are also converted.
+
+xml sub-package.  All tests now passing, though namespaces are not yet
+migrated and rely on the automated method renames (see #3 above) which
+will result in deprecation warnings and a slight performance impact. You
+may wish to wait before upgrading until that module is also converted
+(coming soon).
+
+
+Build 20160209:
+
+#38 Python 3 compatibility work
+
+http sub-package: auth, client, messages, params and grammar modules now
+work in Python 3
+
+urn module now works in Python 3
+
+Untracked changes:
+
+Added SortableMixin to emulate Python 3 TypeErrors in comparisons and to
+simplify implementation of comparison/hash operators in custom classes.
+As a result, some Time/TimePoint comparisons which used to raise
+ValueError (e.g., due to incompatible precision) now return False for ==
+and != operators and raise TypeError for inequalities (<, >, etc). 
+OData is unaffected as OData time values of the same EDM type are always
+comparable.
+
+Re-factored previously undocumented stream classes into their own
+module, in particular the Pipe implementation used for inter-thread
+communication.  Adding documentation for them.
+
+Re-factored the WSGI InputWrapper from rfc5023 into the http modules.
+
+
+Version 0.6.20160201
 --------------------
 
 Summary of New Features:
@@ -158,7 +318,8 @@ the preferred scheme//host:port.
 Implemented a function to create a complete certificate chain. 
 Implemented using pyOpenSSL with a lot of help from `this article`__
 
-..  __: http://blog.san-ss.com.ar/2012/05/validating-ssl-certificate-in-python.html
+..  __:
+    http://blog.san-ss.com.ar/2012/05/validating-ssl-certificate-in-python.html
 
 #33 Fixed exception: 'NoneType' object has no attribute 'current_thread'
 on exit
@@ -166,6 +327,49 @@ on exit
 Caused by an overly ambitious __del__ method in SQLEntityContainer.
 
 
+#34 Fixed missing Edm prefix in OData sample code
+#35 Fixed missing import in rfc5023 (atom protocol) module
+#36 Fixed incorrect error messages in OData $filter queries
+#37 Extended comparison operators in OData to include DateTimeOffset values
+
+All thanks to @ianwj5int for spotting
+
+#38 Python 3 compatibility work
+
+I have started revising modules to support Python 3.  This is not yet
+production ready but it is a small impact on existing modules.  I have
+done my best to maintain compatibility, in practice code should continue
+to work with no changes required.
+
+The most likely failure mode is that you may find a unicode string in
+Python 2 where you expected a plain str.  This can have a knock-on
+effect of promoting data to unicode, e.g., through formatting
+operations.  In general the returned types of methods are just being
+clarified and unicode values are returned only where they may have been
+returned previously anyway.  However, in the case of the URI attributes
+in the rfc2396 module the types have changed from str to unicode in this
+release.
+
+This is work in progress but the impact is likely to be minimal
+at this stage.
+
+#40 & #41 Composite keys and Slug headers
+
+Key hints were not working properly between the OData client and server
+implementations, and were not working at all when the key was composite.
+It is now possible to pass the formatted entity key predicate (including
+the brackets) as a Slug to the OData server and it will attempt to parse
+it and use that key where allowed by the underlying data layer.
+
+#43 Fixes for Python running on Windows
+
+The only substantive changes required were to the way we check for io
+failures when IOError is raised and the way we handle URI containing
+non-ASCII characters.  Some of the unit tests were also affected due to
+issues with timing, including the reduced precision of time.time() on
+Windows-based systems.
+
+    
 Untracked enhancements:
 
 Added a new module to support HTTP cookies.  The HTTP/OData client can
@@ -224,6 +428,12 @@ databases were not working correctly in multi-threaded environments.
 
 Fixed XML parser bug, ID elements in namespaced documents were not
 being handled properly. 
+
+Fixed bug in the OData server when handling non-URI characters in entity
+keys
+
+Fixed a bug with composite key handling in media streams when using the
+SQL layer 
 
 
 Version 0.5.20140801

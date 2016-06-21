@@ -8,7 +8,7 @@ import time
 from optparse import OptionParser
 
 import pyslet.imsbltiv1p0 as lti
-import pyslet.xml20081126.structures as xml
+import pyslet.xml.structures as xml
 import pyslet.odata2.core as odata
 import pyslet.wsgi as wsgi
 
@@ -33,9 +33,9 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
     def new_page_context(self, context):
         page_context = super(NoticeBoard, self).new_page_context(context)
         app_root = str(context.get_app_root())
-        page_context['css_attr'] = xml.EscapeCharData7(
+        page_context['css_attr'] = xml.escape_char_data7(
             app_root + 'css/base.css', True)
-        page_context['favicon_attr'] = xml.EscapeCharData7(
+        page_context['favicon_attr'] = xml.escape_char_data7(
             app_root + 'images/favicon.ico', True)
         return page_context
 
@@ -56,14 +56,14 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
             context.set_status(200)
             return self.html_response(context, data)
         notices = []
-        with context.group['Notices'].OpenCollection() \
+        with context.group['Notices'].open() \
                 as collection:
             collection.set_orderby(
                 odata.Parser('Updated desc').parse_orderby_option())
             collection.set_expand({'User': None})
             for entity in collection.itervalues():
                 notice = {}
-                user = entity['User'].GetEntity()
+                user = entity['User'].get_entity()
                 can_edit = False
                 can_delete = False
                 logging.debug("OwnerID: %s", user['UserID'].value)
@@ -103,7 +103,7 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
     def add_page(self, context):
         self.load_visit(context)
         page_context = self.new_page_context(context)
-        page_context['title_attr'] = xml.EscapeCharData7('', True)
+        page_context['title_attr'] = xml.escape_char_data7('', True)
         page_context['description'] = ''
         page_context[self.csrf_token] = context.session.sid()
         data = self.render_template(context, 'notices/add_form.html',
@@ -122,7 +122,7 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
         if context.group is None:
             raise wsgi.PageNotAuthorized
         # create a new Notice entity
-        with self.container['Notices'].OpenCollection() \
+        with self.container['Notices'].open() \
                 as collection:
             now = time.time()
             new_notice = collection.new_entity()
@@ -132,8 +132,8 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
                 context.get_form_string('description'))
             new_notice['Created'].set_from_value(now)
             new_notice['Updated'].set_from_value(now)
-            new_notice['User'].BindEntity(context.user)
-            new_notice['Context'].BindEntity(context.group)
+            new_notice['User'].bind_entity(context.user)
+            new_notice['Context'].bind_entity(context.group)
             collection.insert_entity(new_notice)
         link = URI.from_octets("view").resolve(context.get_url())
         return self.redirect_page(context, link, 303)
@@ -147,18 +147,18 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
         try:
             query = context.get_query()
             logging.debug("edit key=%s", query['id'])
-            key = odata.ParseURILiteral(query.get('id', '')).value
-            with context.group['Notices'].OpenCollection() \
+            key = odata.uri_literal_from_str(query.get('id', '')).value
+            with context.group['Notices'].open() \
                     as collection:
                 collection.set_expand({'User': None})
                 entity = collection[key]
-                user = entity['User'].GetEntity()
+                user = entity['User'].get_entity()
                 if not (context.user and context.user == user):
                     # only the owner can edit their post
                     raise wsgi.PageNotAuthorized
-                page_context['id_attr'] = xml.EscapeCharData7(
+                page_context['id_attr'] = xml.escape_char_data7(
                     odata.FormatURILiteral(entity['ID']), True)
-                page_context['title_attr'] = xml.EscapeCharData7(
+                page_context['title_attr'] = xml.escape_char_data7(
                     entity['Title'].value, True)
                 page_context['description'] = entity['Description'].value
                 page_context[self.csrf_token] = context.session.sid()
@@ -180,12 +180,13 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
         if context.group is None:
             raise wsgi.PageNotAuthorized
         try:
-            key = odata.ParseURILiteral(context.get_form_string('id')).value
-            with context.group['Notices'].OpenCollection() \
+            key = odata.uri_literal_from_str(
+                context.get_form_string('id')).value
+            with context.group['Notices'].open() \
                     as collection:
                 collection.set_expand({'User': None})
                 entity = collection[key]
-                user = entity['User'].GetEntity()
+                user = entity['User'].get_entity()
                 if not (context.user and context.user == user):
                     # only the owner can edit their post
                     raise wsgi.PageNotAuthorized
@@ -211,17 +212,17 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
             raise wsgi.PageNotAuthorized
         try:
             query = context.get_query()
-            key = odata.ParseURILiteral(query.get('id', '')).value
-            with context.group['Notices'].OpenCollection() \
+            key = odata.uri_literal_from_str(query.get('id', '')).value
+            with context.group['Notices'].open() \
                     as collection:
                 collection.set_expand({'User': None})
                 entity = collection[key]
-                user = entity['User'].GetEntity()
+                user = entity['User'].get_entity()
                 if (not (context.user and context.user == user) and
                         not (context.permissions & self.WRITE_PERMISSION)):
                     # only the owner or user with write permissions can delete
                     raise wsgi.PageNotAuthorized
-                page_context['id_attr'] = xml.EscapeCharData7(
+                page_context['id_attr'] = xml.escape_char_data7(
                     odata.FormatURILiteral(entity['ID']), True)
                 page_context['title'] = entity['Title'].value
                 page_context['description'] = entity['Description'].value
@@ -244,17 +245,18 @@ class NoticeBoard(DjangoApp, lti.ToolProviderApp):
         if context.group is None:
             raise wsgi.PageNotAuthorized
         try:
-            key = odata.ParseURILiteral(context.get_form_string('id')).value
-            with context.group['Notices'].OpenCollection() \
+            key = odata.uri_literal_from_str(
+                context.get_form_string('id')).value
+            with context.group['Notices'].open() \
                     as collection:
                 collection.set_expand({'User': None})
                 entity = collection[key]
-                user = entity['User'].GetEntity()
+                user = entity['User'].get_entity()
                 if (not (context.user and context.user == user) and
                         not (context.permissions & self.WRITE_PERMISSION)):
                     # only the owner or user with write permissions can delete
                     raise wsgi.PageNotAuthorized
-                entity.Delete()
+                entity.delete()
         except ValueError:
             raise wsgi.BadRequest
         except KeyError:

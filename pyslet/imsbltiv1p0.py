@@ -19,9 +19,9 @@ import pyslet.odata2.core as odata
 import pyslet.odata2.metadata as edmx
 import pyslet.odata2.sqlds as sql
 import pyslet.wsgi as wsgi
-import pyslet.xml20081126.structures as xml
+import pyslet.xml.structures as xml
 
-from pyslet.pep8 import renamed_method
+from pyslet.pep8 import MigratedClass, old_method
 from pyslet.rfc2396 import URI
 from pyslet.urn import URN
 
@@ -306,7 +306,7 @@ def load_metadata():
     mdir = os.path.split(os.path.abspath(__file__))[0]
     metadata = edmx.Document()
     with open(os.path.join(mdir, 'imsbltiv1p0_metadata.xml'), 'rb') as f:
-        metadata.Read(f)
+        metadata.read(f)
     return metadata
 
 
@@ -463,7 +463,7 @@ class ToolConsumer(object):
         created and bound to the consumer.  Otherwise, the additional
         information (if supplied) is compared and updated as
         necessary."""
-        with self.entity['Contexts'].OpenCollection() as collection:
+        with self.entity['Contexts'].open() as collection:
             key = wsgi.key60(self.entity['Key'].value + context_id)
             try:
                 context = collection[key]
@@ -523,8 +523,8 @@ class ToolConsumer(object):
             [resource_link_id] will also change if the item is exported
             from one system or context and imported into another system
             or context. """
-        with self.entity['Resources'].OpenCollection() as collection:
-            link = edm.EDMValue.NewSimpleValue(edm.SimpleType.String)
+        with self.entity['Resources'].open() as collection:
+            link = edm.EDMValue.from_type(edm.SimpleType.String)
             link.set_from_value(resource_link_id)
             filter = odata.CommonExpression.from_str("LinkID eq :link",
                                                      {'link': link})
@@ -538,7 +538,7 @@ class ToolConsumer(object):
                 resource['Description'].set_from_value(description)
                 if context is not None:
                     # link this resource to this context
-                    resource['Context'].BindEntity(context)
+                    resource['Context'].bind_entity(context)
                 collection.insert_entity(resource)
             elif len(resources) == 1:
                 resource = resources[0]
@@ -579,8 +579,8 @@ class ToolConsumer(object):
 
         If this user has never been seen before then a new entity is
         created and bound to the consumer, otherwise the """
-        with self.entity['Users'].OpenCollection() as collection:
-            id = edm.EDMValue.NewSimpleValue(edm.SimpleType.String)
+        with self.entity['Users'].open() as collection:
+            id = edm.EDMValue.from_type(edm.SimpleType.String)
             id.set_from_value(user_id)
             filter = odata.CommonExpression.from_str("UserID eq :id",
                                                      {'id': id})
@@ -619,7 +619,7 @@ class ToolConsumer(object):
         return user
 
 
-class ToolProvider(oauth.RequestValidator):
+class ToolProvider(oauth.RequestValidator, MigratedClass):
 
     """An LTI tool provider object
 
@@ -668,7 +668,7 @@ class ToolProvider(oauth.RequestValidator):
                                      request, request_token=None,
                                      access_token=None):
         key = sha256(str(wsgi.key60(client_key)) + nonce).hexdigest()
-        with self.nonces.OpenCollection() as collection:
+        with self.nonces.open() as collection:
             now = time.time()
             try:
                 e = collection[key]
@@ -705,9 +705,10 @@ class ToolProvider(oauth.RequestValidator):
 
         Returns a :class:`ToolConsumer` instance or raises a KeyError if
         key is not the key of any known consumer."""
-        with self.consumers.OpenCollection() as collection:
+        with self.consumers.open() as collection:
             return ToolConsumer(collection[wsgi.key60(key)], self.cipher)
 
+    @old_method('Launch')
     def launch(self, command, url, headers, body_string):
         """Checks a launch request for authorization
 
@@ -797,10 +798,10 @@ class ToolProviderSession(wsgi.Session):
         Any visits from the same consumer but with a different user are
         also removed.  This handles the case where a previous user of
         the browser session needs to be logged out of the tool."""
-        resource = visit['Resource'].GetEntity()
-        user = visit['User'].GetEntity()
+        resource = visit['Resource'].get_entity()
+        user = visit['User'].get_entity()
         if self.entity.exists:
-            with self.entity['Visits'].OpenCollection() as collection:
+            with self.entity['Visits'].open() as collection:
                 # we want to load the Resource, Resource/Consumer and User
                 collection.set_expand({'Resource': {'Consumer': None},
                                        'User': None})
@@ -808,35 +809,35 @@ class ToolProviderSession(wsgi.Session):
                 # now compare these visits to the new one
                 for old_visit in visits:
                     # if the old visit is to the same resource, replace it
-                    old_resource = old_visit['Resource'].GetEntity()
+                    old_resource = old_visit['Resource'].get_entity()
                     if old_resource.key() == resource.key():
                         # drop this visit from this session
                         del collection[old_visit.key()]
                         continue
                     # if the old visit is to the same consumer but with a
                     # different user, replace it
-                    old_consumer = old_resource['Consumer'].GetEntity()
+                    old_consumer = old_resource['Consumer'].get_entity()
                     if old_consumer.key() == consumer.entity.key():
-                        old_user = old_visit['User'].GetEntity()
+                        old_user = old_visit['User'].get_entity()
                         if user != old_user:
                             # drop this visit too
                             del collection[old_visit.key()]
         # add this visit to this collection, linking it to the
         # session
-        self.entity['Visits'].BindEntity(visit)
+        self.entity['Visits'].bind_entity(visit)
         self.touch()
 
     def find_visit(self, resource_id):
         """Finds a visit that matches this resource_id"""
         if not self.entity.exists:
             self.commit()
-        with self.entity['Visits'].OpenCollection() as collection:
+        with self.entity['Visits'].open() as collection:
             # we want to load the Resource, Resource/Consumer and User
             collection.set_expand({'Resource': {'Consumer': None},
                                    'User': None})
             visits = collection.values()
             for visit in visits:
-                resource = visit['Resource'].GetEntity()
+                resource = visit['Resource'].get_entity()
                 if resource.key() == resource_id:
                     return visit
         return None
@@ -885,12 +886,12 @@ class ToolProviderApp(wsgi.SessionApp):
         secret = tp_settings.setdefault('secret', 'secret')
         if options and options.create_silo:
             # we need to create the default silo
-            with cls.container['Silos'].OpenCollection() as collection:
+            with cls.container['Silos'].open() as collection:
                 silo = collection.new_entity()
                 silo['Slug'].set_from_value(silo_name)
                 collection.insert_entity(silo)
             cipher = cls.new_app_cipher()
-            with silo['Consumers'].OpenCollection() as collection:
+            with silo['Consumers'].open() as collection:
                 consumer = ToolConsumer.new_from_values(
                     collection.new_entity(), cipher, 'default', key=key,
                     secret=secret)
@@ -903,7 +904,7 @@ class ToolProviderApp(wsgi.SessionApp):
             os.path.join(mdir, 'imsbltiv1p0_metadata.xml'))
         metadata = edmx.Document()
         with open(metadata_file, 'rb') as f:
-            metadata.Read(f)
+            metadata.read(f)
         return metadata
 
     def __init__(self, **kwargs):
@@ -1067,15 +1068,15 @@ class ToolProviderApp(wsgi.SessionApp):
         The visit entity is bound to the resource entity referred to in
         the launch and stores the permissions and a link to the
         (optional) user entity."""
-        with context.resource.entity_set.NavigationTarget(
-                'Visits').OpenCollection() as collection:
+        with context.resource.entity_set.get_target(
+                'Visits').open() as collection:
             visit = collection.new_entity()
             visit['Permissions'].set_from_value(context.permissions)
-            visit['Resource'].BindEntity(context.resource)
+            visit['Resource'].bind_entity(context.resource)
             user_value = []
             if context.user is not None:
                 user_value.append(context.user)
-                visit['User'].BindEntity(context.user)
+                visit['User'].bind_entity(context.user)
             collection.insert_entity(visit)
             visit['Resource'].set_expansion_values([context.resource])
             visit['User'].set_expansion_values(user_value)
@@ -1131,10 +1132,10 @@ class ToolProviderApp(wsgi.SessionApp):
             if context.visit is None:
                 raise wsgi.PageNotAuthorized
             context.permissions = context.visit['Permissions'].value
-            context.resource = context.visit['Resource'].GetEntity()
-            context.user = context.visit['User'].GetEntity()
-            context.group = context.resource['Context'].GetEntity()
-            tc_entity = context.resource['Consumer'].GetEntity()
+            context.resource = context.visit['Resource'].get_entity()
+            context.user = context.visit['User'].get_entity()
+            context.group = context.resource['Context'].get_entity()
+            tc_entity = context.resource['Consumer'].get_entity()
             context.consumer = ToolConsumer(tc_entity, self.app_cipher)
 
     def lti_launch(self, context):
@@ -1213,9 +1214,9 @@ class ToolProviderApp(wsgi.SessionApp):
 </html>"""
         self.load_visit(context)
         params = {'user':
-                  xml.EscapeCharData7(self.get_user_display_name(context)),
+                  xml.escape_char_data7(self.get_user_display_name(context)),
                   'title':
-                  xml.EscapeCharData7(self.get_resource_title(context))
+                  xml.escape_char_data7(self.get_resource_title(context))
                   }
         data = page % params
         context.set_status(200)
@@ -1257,7 +1258,7 @@ class BLTIToolProvider(ToolProvider):
             file_path=':memory:', container=self.container)
         self.data_source.create_all_tables()
         cipher = wsgi.AppCipher(0, 'secret', self.container['AppKeys'])
-        with self.container['Silos'].OpenCollection() as collection:
+        with self.container['Silos'].open() as collection:
             self.silo = collection.new_entity()
             self.silo['ID'].set_from_value(wsgi.key60('BLTIToolProvider'))
             self.silo['Slug'].set_from_value('BLTIToolProvider')
@@ -1265,10 +1266,7 @@ class BLTIToolProvider(ToolProvider):
         ToolProvider.__init__(self, self.container['Consumers'],
                               self.container['Nonces'], cipher)
 
-    @renamed_method
-    def GenerateKey(self, key_length=128):   # noqa
-        pass
-
+    @old_method('GenerateKey')
     def generate_key(self, key_length=128):
         """Generates a new key
 
@@ -1298,10 +1296,7 @@ class BLTIToolProvider(ToolProvider):
                 key.append(string.join(four, ''))
         return string.join(key, '.')
 
-    @renamed_method
-    def NewConsumer(self, key=None):    # noqa
-        pass
-
+    @old_method('NewConsumer')
     def new_consumer(self, key=None, secret=None):
         """Creates a new BLTIConsumer instance
 
@@ -1316,7 +1311,7 @@ class BLTIToolProvider(ToolProvider):
         if secret is None:
             secret = self.generate_key()
         try:
-            with self.silo['Consumers'].OpenCollection() as collection:
+            with self.silo['Consumers'].open() as collection:
                 consumer = ToolConsumer.new_from_values(
                     collection.new_entity(), self.cipher, key, key=key,
                     secret=secret)
@@ -1325,10 +1320,7 @@ class BLTIToolProvider(ToolProvider):
             raise BLTIDuplicateKeyError(key)
         return key, secret
 
-    @renamed_method
-    def LoadFromFile(self, f):  # noqa
-        pass
-
+    @old_method('LoadFromFile')
     def load_from_file(self, f):
         """Loads the list of trusted consumers
 
@@ -1352,10 +1344,7 @@ class BLTIToolProvider(ToolProvider):
                 except KeyError:
                     self.new_consumer(fields[0], fields[1])
 
-    @renamed_method
-    def SaveToFile(self, f):    # noqa
-        pass
-
+    @old_method('SaveToFile')
     def save_to_file(self, f):
         """Saves the list of trusted consumers
 
@@ -1363,7 +1352,7 @@ class BLTIToolProvider(ToolProvider):
 
         The consumers are saved in a simple file suitable for
         reading with :meth:`load_from_file`."""
-        with self.silo['Consumers'].OpenCollection() as collection:
+        with self.silo['Consumers'].open() as collection:
             consumers = {}
             for c in collection.itervalues():
                 consumer = ToolConsumer(c, self.cipher)
@@ -1372,7 +1361,3 @@ class BLTIToolProvider(ToolProvider):
             keys.sort()
             for key in keys:
                 f.write("%s %s\n" % (key, consumers[key]))
-
-    @renamed_method
-    def Launch(self, command, url, headers, query_string):  # noqa
-        pass

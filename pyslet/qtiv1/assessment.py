@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
-import pyslet.xml20081126.structures as xml
-import pyslet.xsdatatypes20041028 as xsi
+import pyslet.xml.structures as xml
+import pyslet.xml.xsdatatypes as xsi
 import pyslet.imsqtiv2p1 as qtiv2
 
 import core
@@ -66,9 +66,9 @@ class Assessment(common.QTICommentContainer):
         self.SectionMixin.append(child)
         return child
 
-    def GetChildren(self):
+    def get_children(self):
         for child in itertools.chain(
-                QTIComment.GetChildren(self),
+                QTIComment.get_children(self),
                 self.QTIMetadata,
                 self.Objectives,
                 self.AssessmentControl,
@@ -114,7 +114,7 @@ class AssessmentControl(common.QTICommentContainer):
     XMLATTR_hintswitch = ('hintSwitch', core.ParseYesNo, core.FormatYesNo)
     XMLATTR_solutionswitch = (
         'solutionSwitch', core.ParseYesNo, core.FormatYesNo)
-    XMLATTR_view = ('view', core.View.DecodeLowerValue, core.View.EncodeValue)
+    XMLATTR_view = ('view', core.View.from_str_lower, core.View.to_str)
     XMLATTR_feedbackswitch = (
         'feedbackSwitch', core.ParseYesNo, core.FormatYesNo)
     XMLCONTENT = xml.ElementContent
@@ -150,7 +150,7 @@ class AssessFeedback(common.QTICommentContainer, common.ContentMixin):
                     ident CDATA  #REQUIRED
                     title CDATA  #IMPLIED >"""
     XMLNAME = 'assessfeedback'
-    XMLATTR_view = ('view', core.View.DecodeLowerValue, core.View.EncodeValue)
+    XMLATTR_view = ('view', core.View.from_str_lower, core.View.to_str)
     XMLATTR_ident = 'ident'
     XMLATTR_title = 'title'
     XMLCONTENT = xml.ElementContent
@@ -162,9 +162,9 @@ class AssessFeedback(common.QTICommentContainer, common.ContentMixin):
         self.ident = None
         self.title = None
 
-    def GetChildren(self):
+    def get_children(self):
         return itertools.chain(
-            common.QTICommentContainer.GetChildren(self),
+            common.QTICommentContainer.get_children(self),
             common.ContentMixin.GetContentChildren(self))
 
     def ContentMixin(self, childClass):

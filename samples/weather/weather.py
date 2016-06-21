@@ -1,13 +1,6 @@
 #! /usr/bin/env python
 """Creates an OData service from weather data"""
 
-# SAMPLE_DIR='small-sample'
-SAMPLE_DIR = 'daily-text'
-SAMPLE_DB = 'weather.db'
-
-SERVICE_PORT = 8080
-SERVICE_ROOT = "http://localhost:%i/" % SERVICE_PORT
-
 import logging
 import threading
 import time
@@ -27,12 +20,20 @@ from pyslet.odata2.memds import InMemoryEntityContainer
 import pyslet.http.client as http
 
 
+# SAMPLE_DIR='small-sample'
+SAMPLE_DIR = 'daily-text'
+SAMPLE_DB = 'weather.db'
+
+SERVICE_PORT = 8080
+SERVICE_ROOT = "http://localhost:%i/" % SERVICE_PORT
+
+
 def load_metadata(path=os.path.join(os.path.split(__file__)[0],
                                     'weather_schema.xml')):
     """Loads the metadata file from the current directory."""
     doc = edmx.Document()
     with open(path, 'rb') as f:
-        doc.Read(f)
+        doc.read(f)
     return doc
 
 
@@ -118,7 +119,7 @@ def is_bst(t):
 
 
 def load_data_from_file(weather_data, f, year, month, day):
-    with weather_data.OpenCollection() as collection:
+    with weather_data.open() as collection:
         while True:
             line = f.readline()
             if len(line) == 0 or line.startswith('Date unknown.'):
@@ -203,8 +204,8 @@ def load_data(weather_data, dir_name):
 def load_notes(weather_notes, file_name, weather_data):
     with open(file_name, 'r') as f:
         id = 1
-        with weather_notes.OpenCollection() as collection:
-            with weather_data.OpenCollection() as data:
+        with weather_notes.open() as collection:
+            with weather_data.open() as data:
                 while True:
                     line = f.readline()
                     if len(line) == 0:
@@ -236,14 +237,14 @@ def load_notes(weather_notes, file_name, weather_data):
                         for data_point in data.values():
                             # use values, not itervalues to avoid this bug
                             # in Python 2.7 http://bugs.python.org/issue10513
-                            data_point['Note'].BindEntity(note)
+                            data_point['Note'].bind_entity(note)
                             data.update_entity(data_point)
                         id = id + 1
-    with weather_notes.OpenCollection() as collection:
+    with weather_notes.open() as collection:
         collection.set_orderby(
-            core.CommonExpression.OrderByFromString('StartDate desc'))
+            core.CommonExpression.orderby_from_str('StartDate desc'))
         for e in collection.itervalues():
-            with e['DataPoints'].OpenCollection() as affectedData:
+            with e['DataPoints'].open() as affectedData:
                 print "%s-%s: %s (%i data points affected)" % (
                     unicode(e['StartDate'].value), unicode(e['EndDate'].value),
                     e['Details'].value, len(affectedData))
@@ -273,12 +274,12 @@ def test_model(drop=False):
     if drop:
         load_data(weather_data, SAMPLE_DIR)
         load_notes(weather_notes, 'weathernotes.txt', weather_data)
-    with weather_data.OpenCollection() as collection:
+    with weather_data.open() as collection:
         collection.set_orderby(
-            core.CommonExpression.OrderByFromString('WindSpeedMax desc'))
+            core.CommonExpression.orderby_from_str('WindSpeedMax desc'))
         collection.set_page(30)
         for e in collection.iterpage():
-            note = e['Note'].GetEntity()
+            note = e['Note'].get_entity()
             if e['WindSpeedMax'] and e['Pressure']:
                 print "%s: Pressure %imb, max wind speed %0.1f knots "\
                     "(%0.1f mph); %s" % (
@@ -325,9 +326,9 @@ def run_weather_loader(container=None, max_load=30,
     weather_data = container['DataPoints']
     dtg = "http://www.cl.cam.ac.uk/research/dtg/weather/daily-text.cgi?%s"
     not_before_point = iso.TimePoint.from_str(not_before)
-    with weather_data.OpenCollection() as collection:
+    with weather_data.open() as collection:
         collection.set_orderby(
-            core.CommonExpression.OrderByFromString('TimePoint desc'))
+            core.CommonExpression.orderby_from_str('TimePoint desc'))
         sleep_interval = 60
         collection.set_page(1)
         last_point = list(collection.iterpage())

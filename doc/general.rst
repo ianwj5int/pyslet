@@ -13,13 +13,13 @@ Contents:
    :maxdepth: 2
 
    wsgi
-   xml20081126
-   xml20081126.parser
-   xsdatatypes20041028
-   html40_19991224
+   xml
+   html401
    rfc2396
+   urn
    rfc4287
    rfc5023
    iso8601
    unicode5
+   streams
    vfs

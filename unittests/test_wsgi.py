@@ -19,7 +19,7 @@ import pyslet.iso8601 as iso
 import pyslet.http.client as http
 import pyslet.http.cookie as cookie
 import pyslet.http.params as params
-import pyslet.html40_19991224 as html
+import pyslet.html401 as html
 import pyslet.odata2.metadata as edmx
 import pyslet.odata2.sqlds as sql
 import pyslet.wsgi as wsgi
@@ -922,29 +922,33 @@ class AppTests(unittest.TestCase):
         self.assertTrue(req.status.startswith('404 '))
 
     def test_file_response(self):
+        # calculate length of public.txt dynamically
+        # allows us to check out with CRLF
+        pub_path = os.path.join(STATIC_FILES, 'res', 'public.txt')
+        pub_len = os.stat(pub_path).st_size
+
         class App(wsgi.WSGIApp):
 
             def file_page(self, context):
                 context.set_status(200)
                 context.add_header('Content-Type', 'text/plain')
-                return self.file_response(
-                    context, os.path.join(STATIC_FILES, 'res', 'public.txt'))
+                return self.file_response(context, pub_path)
 
             def missing_page(self, context):
                 context.set_status(404)
                 context.add_header('Content-Type', 'text/plain')
-                return self.file_response(
-                    context, os.path.join(STATIC_FILES, 'res', 'public.txt'))
+                return self.file_response(context, pub_path)
+
         App.setup()
         app = App()
         app.set_method('/*', app.file_page)
         app.set_method('/missing', app.missing_page)
         req = MockRequest(path="/index.htm")
         req.call_app(app.call_wrapper)
-        self.assertTrue(req.status.startswith('200 '))
-        self.assertTrue(req.headers['content-length'] == ['11'])
+        self.assertTrue(req.status.startswith('200 '), req.status)
+        self.assertTrue(req.headers['content-length'] == [str(pub_len)])
         self.assertTrue('last-modified' in req.headers)
-        self.assertTrue(req.output.getvalue() == 'Hello mum!\n')
+        self.assertTrue(req.output.getvalue().strip() == 'Hello mum!')
         # check that we can still control the status
         req = MockRequest(path="/missing")
         req.call_app(app.call_wrapper)
@@ -1102,8 +1106,8 @@ class AppTests(unittest.TestCase):
         self.assertFalse('last-modified' in req.headers)
         doc = html.XHTMLDocument()
         req.output.seek(0)
-        doc.Read(req.output)
-        links = list(doc.root.FindChildrenDepthFirst(html.A))
+        doc.read(req.output)
+        links = list(doc.root.find_children_depth_first(html.A))
         self.assertTrue(len(links) == 1)
         link = links[0]
         self.assertTrue(link.href == 'http://www.pyslet.org/')
@@ -1335,13 +1339,15 @@ class WSGIDataAppTests(unittest.TestCase):
         # should not have created the database...
         self.assertFalse(os.path.exists(self.db_path))
         # or the tables!
-        with CreateApp.container['Dummies'].OpenCollection() as collection:
+        with CreateApp.container['Dummies'].open() as collection:
             try:
                 # table should not exist, this should fail
                 len(collection)
                 self.fail("No tables expected")
             except sql.SQLError:
                 pass
+        CreateApp.data_source.close()
+        os.remove(self.db_path)
 
         class CreateApp(wsgi.WSGIDataApp):
             settings_file = self.settings_path
@@ -1354,13 +1360,15 @@ class WSGIDataAppTests(unittest.TestCase):
         # should have created the database...
         self.assertTrue(os.path.exists(self.db_path))
         # and the tables!
-        with CreateApp.container['Dummies'].OpenCollection() as collection:
+        with CreateApp.container['Dummies'].open() as collection:
             try:
                 # table should now exit
                 len(collection)
             except sql.SQLError:
                 self.fail("Tables expected")
         # remove database for the next test...
+        # close the data source, can't just remove the database file
+        CreateApp.data_source.close()
         os.remove(self.db_path)
 
         class CreateApp(wsgi.WSGIDataApp):
@@ -1374,7 +1382,7 @@ class WSGIDataAppTests(unittest.TestCase):
         # should not have created the database no disck...
         self.assertFalse(os.path.exists(self.db_path))
         # but the tables should exist in memory!
-        with CreateApp.container['Dummies'].OpenCollection() as collection:
+        with CreateApp.container['Dummies'].open() as collection:
             try:
                 len(collection)
             except sql.SQLError:
@@ -1408,7 +1416,7 @@ class AppCipherTests(unittest.TestCase):
     </edmx:DataServices>
 </edmx:Edmx>"""
         self.doc = edmx.Document()
-        self.doc.Read(src=key_schema)
+        self.doc.read(src=key_schema)
         self.container = self.doc.root.DataServices["KeySchema.KeyDatabase"]
         # self.memcontainer = InMemoryEntityContainer(self.container)
         self.dbcontainer = sql.SQLiteEntityContainer(
@@ -1419,14 +1427,14 @@ class AppCipherTests(unittest.TestCase):
     def test_constructor(self):
         ac = wsgi.AppCipher(0, 'password', self.key_set)
         # we don't create an records initially
-        with self.key_set.OpenCollection() as collection:
+        with self.key_set.open() as collection:
             self.assertTrue(len(collection) == 0)
         data0 = ac.encrypt("Hello")
         self.assertFalse(data0 == "Hello")
         self.assertTrue(ac.decrypt(data0) == "Hello")
         ac.change_key(1, "pa$$word",
                       iso.TimePoint.from_unix_time(time.time() - 1))
-        with self.key_set.OpenCollection() as collection:
+        with self.key_set.open() as collection:
             self.assertTrue(len(collection) == 1)
         data1 = ac.encrypt("Hello")
         self.assertFalse(data0 == data1)
@@ -1434,12 +1442,12 @@ class AppCipherTests(unittest.TestCase):
         self.assertTrue(ac.decrypt(data0) == "Hello")
         ac.change_key(2, "unguessable",
                       iso.TimePoint.from_unix_time(time.time() - 1))
-        with self.key_set.OpenCollection() as collection:
+        with self.key_set.open() as collection:
             self.assertTrue(len(collection) == 2)
         self.assertTrue(ac.decrypt(data0) == "Hello")
         ac.change_key(10, "anotherkey",
                       iso.TimePoint.from_unix_time(time.time() - 1))
-        with self.key_set.OpenCollection() as collection:
+        with self.key_set.open() as collection:
             self.assertTrue(len(collection) == 3)
         self.assertTrue(ac.decrypt(data0) == "Hello")
         ac2 = wsgi.AppCipher(10, "anotherkey", self.key_set)
@@ -1451,14 +1459,14 @@ class AppCipherTests(unittest.TestCase):
             return
         ac = wsgi.AESAppCipher(0, 'password', self.key_set)
         # we don't create an records initially
-        with self.key_set.OpenCollection() as collection:
+        with self.key_set.open() as collection:
             self.assertTrue(len(collection) == 0)
         data0 = ac.encrypt("Hello")
         self.assertFalse(data0 == "Hello")
         self.assertTrue(ac.decrypt(data0) == "Hello")
         ac.change_key(1, "pa$$word",
                       iso.TimePoint.from_unix_time(time.time() - 1))
-        with self.key_set.OpenCollection() as collection:
+        with self.key_set.open() as collection:
             self.assertTrue(len(collection) == 1)
         data1 = ac.encrypt("Hello")
         self.assertFalse(data0 == data1)
@@ -1466,12 +1474,12 @@ class AppCipherTests(unittest.TestCase):
         self.assertTrue(ac.decrypt(data0) == "Hello")
         ac.change_key(2, "unguessable",
                       iso.TimePoint.from_unix_time(time.time() - 1))
-        with self.key_set.OpenCollection() as collection:
+        with self.key_set.open() as collection:
             self.assertTrue(len(collection) == 2)
         self.assertTrue(ac.decrypt(data0) == "Hello")
         ac.change_key(10, "anotherkey",
                       iso.TimePoint.from_unix_time(time.time() - 1))
-        with self.key_set.OpenCollection() as collection:
+        with self.key_set.open() as collection:
             self.assertTrue(len(collection) == 3)
         self.assertTrue(ac.decrypt(data0) == "Hello")
         ac2 = wsgi.AESAppCipher(10, "anotherkey", self.key_set)
@@ -1491,7 +1499,7 @@ class SessionTests(unittest.TestCase):
         self.app = TestSessionApp()
 
     def test_sid(self):
-        with self.app.container['Sessions'].OpenCollection() as collection:
+        with self.app.container['Sessions'].open() as collection:
             entity = collection.new_entity()
             entity['UserKey'].set_from_value('Hello')
             s = wsgi.Session(entity)
@@ -1503,7 +1511,7 @@ class SessionTests(unittest.TestCase):
         req = MockRequest()
         context = wsgi.WSGIContext(req.environ, req.start_response)
         # default context has no UserAgent
-        with self.app.container['Sessions'].OpenCollection() as collection:
+        with self.app.container['Sessions'].open() as collection:
             entity = collection.new_entity()
             # no UserAgent in environ should match default (NULL)
             s = wsgi.Session(entity)
@@ -1517,7 +1525,7 @@ class SessionTests(unittest.TestCase):
             self.assertTrue(s.match_environ(context))
 
     def test_delete(self):
-        with self.app.container['Sessions'].OpenCollection() as collection:
+        with self.app.container['Sessions'].open() as collection:
             entity = collection.new_entity()
             entity.set_key(1)
             entity['Established'].set_from_value(False)
@@ -1630,9 +1638,9 @@ class FullAppTests(unittest.TestCase):
         # can we check the content?
         doc = html.XHTMLDocument()
         req.output.seek(0)
-        doc.Read(req.output)
+        doc.read(req.output)
         # there should be a form called 'wlaunch'
-        form = doc.GetElementByID('wlaunch')
+        form = doc.get_element_by_id('wlaunch')
         if isinstance(form, html.Form):
             self.assertTrue(form.action is not None)
             target = form.action
@@ -1640,7 +1648,7 @@ class FullAppTests(unittest.TestCase):
             self.assertTrue(isinstance(target, params.HTTPURL))
             # get the input fields
             query = {}
-            for input in form.FindChildrenDepthFirst(html.Input):
+            for input in form.find_children_depth_first(html.Input):
                 if input.name in ("return", "sid", "submit"):
                     query[input.name] = str(input.value)
             query = urllib.urlencode(query)
@@ -1707,13 +1715,13 @@ class FullAppTests(unittest.TestCase):
         self.assertTrue(req.status.startswith('200 '))
         doc = html.XHTMLDocument()
         req.output.seek(0)
-        doc.Read(req.output)
-        form = doc.GetElementByID('wlaunch')
+        doc.read(req.output)
+        form = doc.get_element_by_id('wlaunch')
         if isinstance(form, html.Form):
             target = form.action
             # get the input fields
             query = {}
-            for input in form.FindChildrenDepthFirst(html.Input):
+            for input in form.find_children_depth_first(html.Input):
                 if input.name in ("return", "sid", "submit"):
                     query[input.name] = str(input.value)
             query = urllib.urlencode(query)
@@ -1763,14 +1771,14 @@ class FullAppTests(unittest.TestCase):
         # can we check the content?
         doc = html.XHTMLDocument()
         req.output.seek(0)
-        doc.Read(req.output)
+        doc.read(req.output)
         # there might be a form called 'wlaunch'
-        form = doc.GetElementByID('wlaunch')
+        form = doc.get_element_by_id('wlaunch')
         if isinstance(form, html.Form):
             target = form.action
             # get the input fields
             query = {}
-            for input in form.FindChildrenDepthFirst(html.Input):
+            for input in form.find_children_depth_first(html.Input):
                 if input.name in ("return", "sid", "submit"):
                     query[input.name] = str(input.value)
             query = urllib.urlencode(query)

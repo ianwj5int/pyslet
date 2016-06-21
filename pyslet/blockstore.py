@@ -1,19 +1,23 @@
 #! /usr/bin/env python
 
+import binascii
 import hashlib
+import io
+import logging
 import os
+import random
 import threading
 import time
-import random
-import logging
-import string
-import io
 
-from pyslet.vfs import OSFilePath as FilePath
-from pyslet.iso8601 import TimePoint
-import pyslet.http.params as params
-import pyslet.odata2.csdl as edm
-import pyslet.odata2.core as core
+from .http import params
+from .iso8601 import TimePoint
+from .odata2 import core
+from .odata2 import csdl as edm
+from .py2 import (
+    byte,
+    join_bytes,
+    range3)
+from .vfs import OSFilePath as FilePath
 
 
 MAX_BLOCK_SIZE = 65536
@@ -25,13 +29,13 @@ def _magic():
     try:
         magic = os.urandom(4)
     except NotImplementedError:
-        logging.warn("weak magic: urandom not available, "
-                     "falling back to random.randint")
+        logging.warning("weak magic: urandom not available, "
+                        "falling back to random.randint")
         magic = []
-        for i in xrange(4):
-            magic.append(unichr(random.randint(0, 255)))
-        magic = string.join(magic, '')
-    return magic.encode('hex')
+        for i in range3(4):
+            magic.append(byte(random.randint(0, 255)))
+        magic = join_bytes(magic)
+    return binascii.hexlify(magic)
 
 
 class BlockSize(Exception):
@@ -76,7 +80,7 @@ class BlockStore(object):
 
     def key(self, data):
         if isinstance(data, bytearray):
-            data = str(data)
+            data = bytes(data)
         return self.hash_class(data).hexdigest().lower()
 
     def store(self, data):
@@ -204,7 +208,7 @@ class EDMBlockStore(BlockStore):
 
     def store(self, data):
         key = self.key(data)
-        with self.entity_set.OpenCollection() as blocks:
+        with self.entity_set.open() as blocks:
             if key in blocks:
                 return key
             elif len(data) > self.max_block_size:
@@ -220,7 +224,7 @@ class EDMBlockStore(BlockStore):
         return key
 
     def retrieve(self, key):
-        with self.entity_set.OpenCollection() as blocks:
+        with self.entity_set.open() as blocks:
             try:
                 block = blocks[key]
                 return block['data'].value
@@ -228,7 +232,7 @@ class EDMBlockStore(BlockStore):
                 raise BlockMissing
 
     def delete(self, key):
-        with self.entity_set.OpenCollection() as blocks:
+        with self.entity_set.open() as blocks:
             try:
                 del blocks[key]
             except KeyError:
@@ -296,7 +300,7 @@ class LockStore(object):
         random waits up to a total maximum of *timeout* seconds.  If the
         lock still cannot be obtained :py:class:`LockError` is raised."""
         owner = "%s_%i" % (self.magic, threading.current_thread().ident)
-        with self.entity_set.OpenCollection() as locks:
+        with self.entity_set.open() as locks:
             tnow = time.time()
             tstop = tnow + timeout
             twait = 0
@@ -325,8 +329,8 @@ class LockStore(object):
                     lock['owner'].set_from_value(owner)
                     try:
                         locks.update_entity(lock)
-                        logging.warn("LockingBlockStore removed stale lock "
-                                     "on %s", hash_key)
+                        logging.warning("LockingBlockStore removed stale lock "
+                                        "on %s", hash_key)
                         return LockStoreContext(self, hash_key)
                     except KeyError:
                         twait = 0
@@ -336,7 +340,7 @@ class LockStore(object):
                         pass
                 twait = random.randint(0, timeout // 5)
                 tnow = time.time()
-        logging.warn("LockingBlockStore: timeout locking %s", hash_key)
+        logging.warning("LockingBlockStore: timeout locking %s", hash_key)
         raise LockError
 
     def unlock(self, hash_key):
@@ -366,7 +370,7 @@ class LockStore(object):
             Unlikely but indicates both significant contention and a
             slow process holding the lock."""
         owner = "%s_%i" % (self.magic, threading.current_thread().ident)
-        with self.entity_set.OpenCollection() as locks:
+        with self.entity_set.open() as locks:
             try:
                 lock = locks[hash_key]
                 if lock['owner'].value == owner:
@@ -384,16 +388,16 @@ class LockStore(object):
                     del locks[hash_key]
                 else:
                     # we're not the owner
-                    logging.warn("LockingBlockStore: stale lock reused "
-                                 "on busy hash %s", hash_key)
+                    logging.warning("LockingBlockStore: stale lock reused "
+                                    "on busy hash %s", hash_key)
             except KeyError:
                 # someone deleted the lock already - timeout?
-                logging.warn("LockingBlockStore: stale lock detected "
-                             "on hash %s", hash_key)
+                logging.warning("LockingBlockStore: stale lock detected "
+                                "on hash %s", hash_key)
                 pass
             except edm.ConstraintError:
-                logging.warn("LockingBlockStore: stale lock race "
-                             "on busy hash %s", hash_key)
+                logging.warning("LockingBlockStore: stale lock race "
+                                "on busy hash %s", hash_key)
 
 
 class StreamStore(object):
@@ -471,7 +475,7 @@ class StreamStore(object):
         self.bs = bs
         self.ls = ls
         self.stream_set = entity_set
-        self.block_set = entity_set.NavigationTarget('Blocks')
+        self.block_set = entity_set.get_target('Blocks')
 
     def new_stream(self,
                    mimetype=params.MediaType('application', 'octet-stream'),
@@ -487,7 +491,7 @@ class StreamStore(object):
         The stream is identified by the stream entity's key which you
         can store elsewhere as a reference and pass to
         :py:meth:`get_stream` to retrieve the stream again later."""
-        with self.stream_set.OpenCollection() as streams:
+        with self.stream_set.open() as streams:
             stream = streams.new_entity()
             if not isinstance(mimetype, params.MediaType):
                 mimetype = params.MediaType.from_str(mimetype)
@@ -510,7 +514,7 @@ class StreamStore(object):
 
         Returns the stream entity as an
         :py:class:`~pyslet.odata2.csdl.Entity` instance."""
-        with self.stream_set.OpenCollection() as streams:
+        with self.stream_set.open() as streams:
             stream = streams[stream_id]
         return stream
 
@@ -538,14 +542,14 @@ class StreamStore(object):
 
         Any data blocks that are orphaned by this deletion are
         removed."""
-        with self.stream_set.OpenCollection() as streams:
+        with self.stream_set.open() as streams:
             self.delete_blocks(stream)
             del streams[stream.key()]
             stream.exists = False
 
     def store_block(self, stream, block_num, data):
         hash_key = self.bs.key(data)
-        with stream['Blocks'].OpenCollection() as blocks:
+        with stream['Blocks'].open() as blocks:
             block = blocks.new_entity()
             block['num'].set_from_value(block_num)
             block['hash'].set_from_value(hash_key)
@@ -561,11 +565,11 @@ class StreamStore(object):
         if new_hash == hash_key:
             return
         filter = core.BinaryExpression(core.Operator.eq)
-        filter.AddOperand(core.PropertyExpression('hash'))
-        hash_value = edm.EDMValue.NewSimpleValue(edm.SimpleType.String)
-        filter.AddOperand(core.LiteralExpression(hash_value))
+        filter.add_operand(core.PropertyExpression('hash'))
+        hash_value = edm.EDMValue.from_type(edm.SimpleType.String)
+        filter.add_operand(core.LiteralExpression(hash_value))
         # filter is: hash eq <hash_value>
-        with self.block_set.OpenCollection() as base_coll:
+        with self.block_set.open() as base_coll:
             with self.ls.lock(hash_key):
                 with self.ls.lock(new_hash):
                     self.bs.store(data)
@@ -579,9 +583,9 @@ class StreamStore(object):
                         self.bs.delete(hash_key)
 
     def retrieve_blocklist(self, stream):
-        with stream['Blocks'].OpenCollection() as blocks:
+        with stream['Blocks'].open() as blocks:
             blocks.set_orderby(
-                core.CommonExpression.OrderByFromString("num asc"))
+                core.CommonExpression.orderby_from_str("num asc"))
             for block in blocks.itervalues():
                 yield block
 
@@ -591,11 +595,11 @@ class StreamStore(object):
     def delete_blocks(self, stream, from_num=0):
         blocks = list(self.retrieve_blocklist(stream))
         filter = core.BinaryExpression(core.Operator.eq)
-        filter.AddOperand(core.PropertyExpression('hash'))
-        hash_value = edm.EDMValue.NewSimpleValue(edm.SimpleType.String)
-        filter.AddOperand(core.LiteralExpression(hash_value))
+        filter.add_operand(core.PropertyExpression('hash'))
+        hash_value = edm.EDMValue.from_type(edm.SimpleType.String)
+        filter.add_operand(core.LiteralExpression(hash_value))
         # filter is: hash eq <hash_value>
-        with self.block_set.OpenCollection() as base_coll:
+        with self.block_set.open() as base_coll:
             for block in blocks:
                 if from_num and block['num'].value < from_num:
                     continue
@@ -691,12 +695,12 @@ class BlockStream(io.RawIOBase):
             if data:
                 block = self.blocks[self._bnum]
                 if block.exists:
-                    self.ss.update_block(block, str(data))
+                    self.ss.update_block(block, bytes(data))
                 else:
                     self.blocks[self._bnum] = self.ss.store_block(
                         self.stream, self._bnum, data)
                 if self._md5 is not None and self._bnum == self._md5num:
-                    self._md5.update(str(data))
+                    self._md5.update(bytes(data))
                     self._md5num += 1
                 else:
                     self._md5 = None
@@ -755,7 +759,7 @@ class BlockStream(io.RawIOBase):
                 self._bdirty = True
                 self.flush()
                 # finally add the last block, but don't store it yet
-                with self.stream['Blocks'].OpenCollection() as blist:
+                with self.stream['Blocks'].open() as blist:
                     new_block = blist.new_entity()
                     new_block['num'].set_from_value(self._bnum)
                     self.blocks.append(new_block)
