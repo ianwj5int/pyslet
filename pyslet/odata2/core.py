@@ -8,6 +8,7 @@ import json
 import math
 import uuid
 import warnings
+import datetime
 
 from . import csdl as edm
 from .. import iso8601 as iso
@@ -2861,6 +2862,15 @@ def simple_value_from_json(v, json_value):
             t, overflow = iso.Time().offset(
                 seconds=int(ticks[0]) / 1000.0).with_zone(zdir, zoffset // 60,
                                                           zoffset % 60)
+            d = iso.Date(absolute_day=BASE_DAY + overflow)
+            v.set_from_value(iso.TimePoint(date=d, time=t))
+        elif jsonValue.endswith('Z'):
+            # Parse the incoming date using the ISO 8601 format
+            naive_datetime = datetime.datetime.strptime(jsonValue, '%Y-%m-%dT%H:%M:%S.%fZ')
+            total_seconds = (naive_datetime - datetime.datetime.utcfromtimestamp(0)).total_seconds()
+            t, overflow = iso.Time().offset(
+                seconds=total_seconds)
+            t = t.with_zone(0, 0, 0)
             d = iso.Date(absolute_day=BASE_DAY + overflow)
             v.set_from_value(iso.TimePoint(date=d, time=t))
         else:
