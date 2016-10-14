@@ -2841,7 +2841,8 @@ def simple_value_from_json(v, json_value):
         v.set_from_literal(json_value)
     elif isinstance(v, (edm.DateTimeOffsetValue)):
         if json_value.startswith("/Date(") and json_value.endswith(")/"):
-            ticks = int(json_value[6:-2])
+            # handle format "/Date(1476436582)" or "/Date(1476436582+0200)"
+            ticks = json_value[6:-2]
             if '+' in ticks:
                 # split by +
                 ticks = ticks.split('+')
@@ -2860,8 +2861,12 @@ def simple_value_from_json(v, json_value):
             else:
                 zoffset = 0
             t, overflow = iso.Time().offset(
+<<<<<<< HEAD
                 seconds=int(ticks[0]) / 1000.0).with_zone(zdir, zoffset // 60,
                                                           zoffset % 60)
+=======
+                seconds=int(ticks[0]) / 1000.0).with_zone(zdir, zoffset // 60, zoffset % 60)
+>>>>>>> 97f45ae... Fixes to handle date format "/Date(1476436582)" or
             d = iso.Date(absolute_day=BASE_DAY + overflow)
             v.set_from_value(iso.TimePoint(date=d, time=t))
         elif jsonValue.endswith('Z'):
