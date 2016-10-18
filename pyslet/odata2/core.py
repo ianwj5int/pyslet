@@ -2861,17 +2861,13 @@ def simple_value_from_json(v, json_value):
             else:
                 zoffset = 0
             t, overflow = iso.Time().offset(
-<<<<<<< HEAD
-                seconds=int(ticks[0]) / 1000.0).with_zone(zdir, zoffset // 60,
-                                                          zoffset % 60)
-=======
-                seconds=int(ticks[0]) / 1000.0).with_zone(zdir, zoffset // 60, zoffset % 60)
->>>>>>> 97f45ae... Fixes to handle date format "/Date(1476436582)" or
+                seconds=int(ticks[0]) / 1000.0)
+            t = t.with_zone(zdir, zoffset // 60, zoffset % 60)
             d = iso.Date(absolute_day=BASE_DAY + overflow)
             v.set_from_value(iso.TimePoint(date=d, time=t))
-        elif jsonValue.endswith('Z'):
+        elif json_value.endswith('Z'):
             # Parse the incoming date using the ISO 8601 format
-            naive_datetime = datetime.datetime.strptime(jsonValue, '%Y-%m-%dT%H:%M:%S.%fZ')
+            naive_datetime = datetime.datetime.strptime(json_value, '%Y-%m-%dT%H:%M:%S.%fZ')
             total_seconds = (naive_datetime - datetime.datetime.utcfromtimestamp(0)).total_seconds()
             t, overflow = iso.Time().offset(
                 seconds=total_seconds)
